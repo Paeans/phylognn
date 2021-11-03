@@ -167,3 +167,23 @@ def rev_trans(g, p1 = None, p2 = None):
         end = g0_range if len(g) == 1 else (start + len(g[1]) - (2 if is_circle(g[1]) else 0))
         p2 = random.randint(start, end)
     return trans_op(g, p1, p2)
+
+def encodeAdj(genome):
+    l = len(genome)
+    adjacency = np.zeros(l*2 + 2, dtype=np.int32)
+    adjacency[0] = -1
+
+    for i in range(l):
+        genin = genome[i] * 2
+        if genome[i] > 0:
+            adjacency[i*2 + 1] = genin - 2
+            adjacency[i*2 + 2] = genin - 1
+        else:
+            adjacency[i*2 + 1] = -genin - 1
+            adjacency[i*2 + 2] = -genin - 2
+
+    adjacency[l * 2 + 1] = -1
+    if l>= 2 and genome[0] == genome[-1]:
+        # cicle
+        return np.delete(adjacency, -2)
+    return adjacency
