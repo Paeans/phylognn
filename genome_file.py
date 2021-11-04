@@ -182,7 +182,7 @@ def encodeAdj(genome):
             adjacency[i*2 + 1] = -genin - 1
             adjacency[i*2 + 2] = -genin - 2
 
-    adjacency[l * 2 + 1] = -1
+    adjacency[l * 2 + 1] = -2
     if l>= 2 and genome[0] == genome[-1]:
         # cicle
         return np.delete(adjacency, -2)

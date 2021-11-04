@@ -12,8 +12,8 @@ def neighbor(A, num):
 def findPath(A, B, num, visited, path):
     if num in visited:
         return True
-    if num == -1:
-        return False
+#     if num == -1:
+#         return False
     
     visited.append(num)
     nb = neighbor(B, num)
@@ -21,11 +21,8 @@ def findPath(A, B, num, visited, path):
     return findPath(B, A, nb, visited, path)
 
 def dcj_dist(A, B):
-    if A[0] != -1 or A[-1] != -1:
-        A = encodeAdj(A)
-    if B[0] != -1 or B[-1] != -1:
-        B = encodeAdj(B)
-        
+    A, B = encodeAdj(A), encodeAdj(B)
+    
     visited = []
     cycle, oddp = 0, 0
     
@@ -44,4 +41,4 @@ def dcj_dist(A, B):
         if len(path) % 2 == 0:
             oddp += 1
         
-    return cycle, oddp, (len(A) - 2)//2 - (cycle + oddp // 2)
+    return cycle, oddp, len(A)//2 - (cycle + oddp // 2) # (len(A) - 2)//2 - (cycle + oddp // 2)
