@@ -1,4 +1,9 @@
 import numpy as np
+import random
+
+from scipy.io import savemat, loadmat
+
+from dcj_comp import dcj_dist
 
 # def revers_mat(size, p1, p2):
 def revers_mat(size, *p):
@@ -39,3 +44,82 @@ def trans_rev(size, *p):
 #     end = p1 + p4 - p3 + p3 - p2
 #     res[:, p1:end] = np.fliplr(res[:, p1:end]) * -1
 #     return res
+
+
+def rand_param(size, op_type):    
+    p = [random.randint(0,size) for _ in range(4)]
+    if op_type == 2: # reverse operation
+        while p[0] == p[1]:
+            p = [random.randint(0,size) for _ in range(4)]
+    elif op_type == 0: # trans reverse
+        while p[0] == p[1] or \
+        (min(p[0], p[1]) == p[2] and (p[3] == 0 or p[3] % abs(p[0] - p[1]) == 0)) or \
+        p[2] % (size - abs(p[0] - p[1]) + 1) == min(p[0], p[1]):
+            p = [random.randint(0,size) for _ in range(4)]
+    elif op_type == 1: # trans op
+        p = sorted(p)
+        while (p[0] == p[1] and p[2] == p[3]) or \
+        (p[0] == p[1] and p[1] == p[2]) or \
+        (p[1] == p[2] and p[2] == p[3]):
+            p = sorted([random.randint(0,size) for _ in range(4)])
+            
+    return p
+
+
+def generate_seq(gene):
+    if len(gene) == 1:
+        return [[gene[0]], [-gene[0]]]
+    res = []
+    for i in range(len(gene)):
+        g = gene[i]
+        rest = gene[0:i] + gene[i+1:]
+        tmp = generate_seq(rest)
+        res += [[g] + x for x in tmp] + [[-g] + x for x in tmp]
+    return res
+
+def gen_random_seq(l, n, r_n):
+    res = np.zeros((n, l), dtype = np.int32)
+    for i in range(n):
+        s = np.random.permutation(l) + 1
+        s[np.random.randint(l, size = r_n)] *=-1
+        res[i] = s
+    return res
+
+def gen_seqs(l,n):
+    genes = np.zeros((n * (l+1), l), dtype = np.int32)
+    for i in range(l+1):
+        genes[i*n : (i+1)*n] = gen_random_seq(l,n,i)
+    np.random.shuffle(genes)
+    return np.reshape(genes, (-1,1,l))
+
+def gen_op_mat(l, n):
+    t_dist = [0 for _ in range(n)]
+    
+    mat_op_list = [trans_rev, trans_mat, revers_mat]
+    rand_op = [random.randint(0,2) for _ in range(n)]
+    param_op = [rand_param(l, op_type) for op_type in rand_op] #[[random.randint(0,n) for _ in range(4)] for _ in range(vol)]
+    t_dist = np.add(t_dist, [1 if x == 2 else 2 for x in rand_op])
+
+    op_list = np.array([mat_op_list[op](l, *param) 
+           for op, param in zip(rand_op, param_op)])
+    return op_list, t_dist
+
+def gen_dataset(l,n, repeat = 1):
+    new_seq = gen_seqs(l,n)
+    s = new_seq
+    o = np.repeat(np.expand_dims(np.identity(l), (0,1)), n * (l+1), axis = 0)
+    t = np.expand_dims(np.repeat(0, n*(l+1)), axis = 1)
+    for _ in range(repeat):
+        new_o, new_t = gen_op_mat(s.shape[-1], s.shape[0])
+        new_seq = np.matmul(new_seq, new_o)
+        s = np.concatenate((s, new_seq), axis = 1)
+        o = np.concatenate((o, np.expand_dims(new_o, 1)), axis = 1)
+        t = np.concatenate((t, np.expand_dims(new_t, 1)), axis = 1)
+    return s, o, t
+
+
+def gen_data_file(l,n,repeat,filename):
+    s, o, t = gen_dataset(l, n, repeat)
+    d = np.array([[dcj_dist(a[0], x)[-1] for x in a] for a in s])
+    
+    savemat(filename, {'s':s, 'o':o, 't':t, 'd':d}, do_compression = True)
