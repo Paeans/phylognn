@@ -42,3 +42,39 @@ def dcj_dist(A, B):
             oddp += 1
         
     return cycle, oddp, len(A)//2 - (cycle + oddp // 2) # (len(A) - 2)//2 - (cycle + oddp // 2)
+
+
+def dcj_dist_new(A, B):
+    A, B = encodeAdj(A), encodeAdj(B)
+    
+    A_visited = {x:False for x in A}
+    A_nb, B_nb = {}, {}
+    for i in range(len(A)):
+        t = i + 1 if i % 2 == 0 else i - 1
+        A_nb[A[i]] = A[t]
+        B_nb[B[i]] = B[t]
+        
+    cycle, oddp, evenp = 0, 0, 0
+    
+    for i in range(len(A)):
+        p = A[i]
+        if A_visited[p]:
+            continue
+            
+        while True:
+            A_visited[p] = True
+            p_next = B_nb[p]
+            if p_next == None:
+                oddp += 1
+                break
+                
+            A_visited[p_next] = True
+            p = A_nb[p_next]
+            if p == None:
+                evenp += 1
+                break
+            if A_visited[p]:
+                cycle += 1
+                break
+                
+    return cycle, oddp, len(A)//2 - (cycle + oddp // 2)
