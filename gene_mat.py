@@ -123,8 +123,6 @@ def gen_dataset(l,n, repeat = 1):
     o = np.repeat(np.expand_dims(np.identity(l), (0,1)), n, axis = 0)
     
     for i in range(1, repeat):
-        
-
 #     t = np.expand_dims(np.repeat(0, n), axis = 1)
 #     for _ in range(repeat):
         new_o, new_t = gen_op_mat(s.shape[-1], s.shape[0])
