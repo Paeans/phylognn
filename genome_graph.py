@@ -50,7 +50,7 @@ from genome_file import encodeAdj
 #         arc.set_alpha(0.3)
 #     plt.show()
 
-def gen_single_graph(*genome):
+def gen_single_graph(genome):
     graph_adj = np.empty((2,0), dtype = np.int32)
     max_node_index = []
 
