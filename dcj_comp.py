@@ -20,7 +20,7 @@ def findPath(A, B, num, visited, path):
     path.append((num, nb))
     return findPath(B, A, nb, visited, path)
 
-def dcj_dist(A, B):
+def dcj_dist_old(A, B):
     A, B = encodeAdj(A), encodeAdj(B)
     
     visited = []
@@ -44,7 +44,7 @@ def dcj_dist(A, B):
     return cycle, oddp, len(A)//2 - (cycle + oddp // 2) # (len(A) - 2)//2 - (cycle + oddp // 2)
 
 
-def dcj_dist_new(A, B):
+def dcj_dist(A, B):
     A, B = encodeAdj(A), encodeAdj(B)
     
     A_visited = {x:False for x in A}
@@ -64,15 +64,15 @@ def dcj_dist_new(A, B):
         while True:
             A_visited[p] = True
             p_next = B_nb[p]
-            if p_next == None:
-                oddp += 1
-                break
+#             if p_next == None:
+#                 oddp += 1
+#                 break
                 
             A_visited[p_next] = True
             p = A_nb[p_next]
-            if p == None:
-                evenp += 1
-                break
+#             if p == None:
+#                 evenp += 1
+#                 break
             if A_visited[p]:
                 cycle += 1
                 break
