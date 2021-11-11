@@ -50,6 +50,40 @@ from genome_file import encodeAdj
 #         arc.set_alpha(0.3)
 #     plt.show()
 
+def gen_graph(genome):
+    gene_adj = [encodeAdj(gene) for gene in genome]
+    num_edges = np.sum([len(g) - 3 for g in gene_adj])
+    num_genes = len(genome)
+    
+    graph_adj = np.zeros((2, num_edges), dtype = np.int32)
+    edge_attr = np.zeros((num_edges, num_genes), dtype = np.int32)
+    
+    L, g_index = 0, 0
+    for gene in gene_adj:
+        gene_s = gene[1:-2]
+        gene_e = gene[2:-1]
+        l = len(gene_s)
+        
+        graph_adj[0, L : L + l] = gene_s
+        graph_adj[1, L : L + l] = gene_e
+        
+        edge_attr[L : L + l, g_index] = 1
+        
+        L += l
+        g_index += 1
+        
+    node_num = np.max(gene_adj) + 1
+    node_x = np.zeros((node_num, 2), dtype = np.int32)
+    node_x[np.arange(node_num) % 2 == 0, 0] = 1
+    node_x[np.arange(node_num) % 2 == 1, 1] = 1
+    
+    graph_data = Data(x = node_x, edge_index = torch.tensor(graph_adj), 
+                      edge_attr = edge_attr,
+                      dtype = torch.long, num_nodes = node_num)
+        
+    return graph_data
+        
+
 def gen_single_graph(genome):
     graph_adj = np.empty((2,0), dtype = np.int32)
     max_node_index = []
@@ -71,12 +105,12 @@ def gen_single_graph(genome):
         
     return graph_data
 
-def gen_multi_graph(*genomes):
-    graphs = []
-    for genome in genomes:
-        graph_data = gen_single_graph(genome)
-        graphs.append(graph_data)
-    return graphs
+# def gen_multi_graph(*genomes):
+#     graphs = []
+#     for genome in genomes:
+#         graph_data = gen_single_graph(genome)
+#         graphs.append(graph_data)
+#     return graphs
 
 def plot_multi_graph(data, figsize = (120, 90), pos = None):
     pgraph = [to_networkx(d) for d in data]
@@ -94,16 +128,21 @@ def plot_multi_graph(data, figsize = (120, 90), pos = None):
     
     alpha_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
     color_list = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-    arc_list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+    arc_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+    style_list = ['--', '-.', ':', '-']
     for i, graph in enumerate(pgraph):
-        if i <= 7:
-            connectionstyle = 'arc3,rad=' + str(i)
-        else:
-            connectionstyle = 'arc3,rad=' + str(np.random.rand(1)[0])
+        arc = arc_list[i] if i <=7 else arc_list[np.random.rand(1)[0]]
+#         if i <= 7:
+#             arc = arc_list[i]
+#             connectionstyle = 'arc3,rad=' + str(i)
+#         else:
+#             connectionstyle = 'arc3,rad=' + str(np.random.rand(1)[0])
+        connectionstyle = 'arc3,rad=' + str(arc)
         arcs = nx.draw_networkx_edges(graph, pos=pos, 
                                       connectionstyle=connectionstyle, #'arc3,rad=0.3',
                                       edge_color = color_list[i%7],
-                                      width = 2)
+                                      width = 2,
+                                     style = style_list[i%4])
 #         for arc in arcs:  # change alpha values of arcs
 #             arc.set_alpha(alpha_list[i%7])
     plt.show()
