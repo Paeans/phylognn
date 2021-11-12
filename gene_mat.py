@@ -141,21 +141,3 @@ def gen_data_file(l,n,repeat,filename):
     d = np.array([[dcj_dist(a[0], x)[-1] for x in a] for a in s])
     
     savemat(filename, {'s':s, 'o':o, 't':t, 'd':d}, do_compression = True)
-    
-    
-def gen_dataset_new(l,n, repeat = 1):
-    s = th.zeros(n, repeat, l, device = device)
-    t = th.zeros(n, repeat, device = device)
-    
-    new_seq = th.tensor(gen_seqs(l, n), dtype = th.float, device = device)
-    s[:,0:1] = new_seq
-    t[:, 0] = 0
-    
-    o = np.repeat(np.expand_dims(np.identity(l), (0,1)), n, axis = 0)
-    
-    for i in range(1, repeat):
-        new_o, new_t = gen_op_mat(l, n)
-        new_seq = th.matmul(new_seq, th.tensor(new_o, dtype = th.float, device = device))
-        s[:, i:(i+1)] = new_seq
-        t[:, i] = th.tensor(new_t, device = device)
-    return s, o, t
