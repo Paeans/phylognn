@@ -11,6 +11,17 @@ def write_genome(gene_groups, fname = 'genome.txt'):
                 else:
                     gfile.write('L: ' + ' '.join([str(x) for x in g]) + '\n')
             gfile.write('\n')
+
+def write_genome_notag(gene_groups, fname = 'genome.txt'):
+    with open(fname, 'w') as gfile:
+        for i in range(len(gene_groups)):
+            gfile.write('>g' + str(i) + '\n')
+            for g in gene_groups[i]:
+                if g[0] == g[-1] and len(g) >= 2:
+                    gfile.write(' '.join([str(x) for x in g[:-1]]) + '\n')
+                else:
+                    gfile.write(' '.join([str(x) for x in g]) + '\n')
+            gfile.write('\n')
             
 def read_genome(fname = 'genome.txt'):
     gene_groups = []
