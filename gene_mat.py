@@ -98,11 +98,14 @@ def gen_seqs(l,n):
 #     np.random.shuffle(genes)
     return np.reshape(genes, (-1,1,l))
 
-def gen_op_mat(l, n):
+def gen_op_mat(l, n, rand_op = None):
 #     t_dist = [0 for _ in range(n)]
     
     mat_op_list = [trans_rev, trans_mat, revers_mat]
-    rand_op = np.random.randint(0,3,size = n) # [random.randint(0,2) for _ in range(n)]
+    if rand_op == None:
+        rand_op = np.random.randint(0,3,size = n) # [random.randint(0,2) for _ in range(n)]
+    else:
+        rand_op = np.repeat(rand_op, n)
     param_op = [rand_param(l, op_type) for op_type in rand_op] #[[random.randint(0,n) for _ in range(4)] for _ in range(vol)]
 #     t_dist = np.add(t_dist, [1 if x == 2 else 2 for x in rand_op])
     t_dist = [1 if x == 2 else 2 for x in rand_op]
@@ -126,6 +129,29 @@ def gen_dataset(l,n, repeat = 1):
 #     t = np.expand_dims(np.repeat(0, n), axis = 1)
 #     for _ in range(repeat):
         new_o, new_t = gen_op_mat(s.shape[-1], s.shape[0])
+#         new_seq = np.matmul(new_seq, new_o)
+        new_seq = th.matmul(new_seq, th.tensor(new_o, dtype = th.float, device = device))
+#         s = np.concatenate((s, new_seq.cpu().numpy()), axis = 1)
+        s[:, i:(i+1)] = new_seq.cpu().numpy()
+#         o = np.concatenate((o, np.expand_dims(new_o, 1)), axis = 1)
+#         t = np.concatenate((t, np.expand_dims(new_t, 1)), axis = 1)
+        t[:, i] = new_t
+    return s, o, t
+
+def gen_dataset_wt(l,n, step = 1, op_type = None):
+    s = np.zeros((n, step, l))
+    t = np.zeros((n, step))
+    
+    s[:,0:1] = gen_seqs(l,n)
+    t[:, 0] = 0
+    new_seq = th.tensor(s[:,0:1], dtype = th.float, device = device)
+    
+    o = np.repeat(np.expand_dims(np.identity(l), (0,1)), n, axis = 0)
+    
+    for i in range(1, step):
+#     t = np.expand_dims(np.repeat(0, n), axis = 1)
+#     for _ in range(repeat):
+        new_o, new_t = gen_op_mat(s.shape[-1], s.shape[0], op_type)
 #         new_seq = np.matmul(new_seq, new_o)
         new_seq = th.matmul(new_seq, th.tensor(new_o, dtype = th.float, device = device))
 #         s = np.concatenate((s, new_seq.cpu().numpy()), axis = 1)

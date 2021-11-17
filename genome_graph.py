@@ -50,7 +50,7 @@ from genome_file import encodeAdj
 #         arc.set_alpha(0.3)
 #     plt.show()
 
-def gen_graph(genome):
+def gen_graph(genome, label = None):
     gene_adj = [encodeAdj(gene) for gene in genome]
     num_edges = np.sum([len(g) - 3 for g in gene_adj])
     num_genes = len(genome)
@@ -80,6 +80,7 @@ def gen_graph(genome):
     graph_data = Data(x = node_x, edge_index = torch.tensor(graph_adj), 
                       edge_attr = edge_attr,
                       dtype = torch.long, num_nodes = node_num)
+    graph_data.y = label
         
     return graph_data
         
