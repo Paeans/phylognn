@@ -77,10 +77,11 @@ def gen_graph(genome, label = None):
     node_x[np.arange(node_num) % 2 == 0, 0] = 1
     node_x[np.arange(node_num) % 2 == 1, 1] = 1
     
-    graph_data = Data(x = node_x, edge_index = torch.tensor(graph_adj), 
-                      edge_attr = edge_attr,
+    graph_data = Data(x = torch.tensor(node_x, dtype = torch.long), 
+                      edge_index = torch.tensor(graph_adj, dtype = torch.long), 
+                      edge_attr = torch.tensor(edge_attr),
                       dtype = torch.long, num_nodes = node_num)
-    graph_data.y = label
+    graph_data.y = torch.tensor([label], dtype = torch.long)
         
     return graph_data
         

@@ -31,7 +31,9 @@ class GeneGraphDataset(InMemoryDataset):
         self.gene_len = gene_len
         self.step_range = step_range
         self.graph_num = graph_num
-        super().__init__(root, transform = None, 
+        super().__init__(root + '_' + str(self.gene_len) + '_' 
+                         + str(self.step_range) + '_' + str(self.graph_num), 
+                         transform = None, 
                          pre_transform = None, 
                          pre_filter = None)
         self.data, self.slices = torch.load(self.processed_paths[0])
