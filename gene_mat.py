@@ -183,3 +183,26 @@ def gen_data_file(l,n,repeat,filename):
     d = np.array([[dcj_dist(a[0], x)[-1] for x in a] for a in s])
     
     savemat(filename, {'s':s, 'o':o, 't':t, 'd':d}, do_compression = True)
+
+def check_dcj(x):
+    a,b,c = dcj_dist(x[0], x[1])[-1], dcj_dist(x[-1], x[1])[-1], dcj_dist(x[0], x[-1])[-1]
+    if a != b or (a+b) != c:
+        return False
+    return True
+
+def gen_g2g_data(gene_len, graph_num, step, op_type):
+    l = 0
+    res = np.zeros((graph_num, 3, gene_len), dtype = np.int32)
+    while True:
+        s,o,t = gen_dataset_wt(gene_len, graph_num * 2, 2*step + 1, op_type)
+        s = s[:, (0, step, -1)]
+
+        with Pool(22) as p:
+            tags = p.map(check_dcj, list(s))
+        s =  s[tags]
+        size = min(s.shape[0], graph_num - l)
+
+        res[l: (l + size)] = s[:size]
+        l += size
+        if l>=graph_num:
+            return res

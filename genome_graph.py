@@ -50,7 +50,7 @@ from genome_file import encodeAdj
 #         arc.set_alpha(0.3)
 #     plt.show()
 
-def gen_graph(genome, label = None):
+def gen_graph(genome, label = None): # label number
     gene_adj = [encodeAdj(gene) for gene in genome]
     num_edges = np.sum([len(g) - 3 for g in gene_adj])
     num_genes = len(genome)
@@ -148,3 +148,39 @@ def plot_multi_graph(data, figsize = (120, 90), pos = None):
 #         for arc in arcs:  # change alpha values of arcs
 #             arc.set_alpha(alpha_list[i%7])
     plt.show()
+    
+
+def gen_g2g_graph(genome, target):
+    gene_adj = [encodeAdj(gene) for gene in genome]
+    num_edges = np.sum([len(g) - 3 for g in gene_adj])
+    num_genes = len(genome)
+    
+    graph_adj = np.zeros((2, num_edges), dtype = np.int32)
+    edge_attr = np.zeros((num_edges, num_genes), dtype = np.int32)
+    
+    L, g_index = 0, 0
+    for gene in gene_adj:
+        gene_s = gene[1:-2]
+        gene_e = gene[2:-1]
+        l = len(gene_s)
+        
+        graph_adj[0, L : L + l] = gene_s
+        graph_adj[1, L : L + l] = gene_e
+        
+        edge_attr[L : L + l, g_index] = 1
+        
+        L += l
+        g_index += 1
+        
+    node_num = np.max(gene_adj) + 1
+    node_x = np.zeros((node_num, 2), dtype = np.int32)
+    node_x[np.arange(node_num) % 2 == 0, 0] = 1
+    node_x[np.arange(node_num) % 2 == 1, 1] = 1
+    
+    graph_data = Data(x = torch.tensor(node_x, dtype = torch.long), 
+                      edge_index = torch.tensor(graph_adj, dtype = torch.long), 
+                      edge_attr = torch.tensor(edge_attr),
+                      dtype = torch.long, num_nodes = node_num)
+    graph_data.pos_edge_label_index = gen_graph([target], 0).edge_index
+        
+    return graph_data
