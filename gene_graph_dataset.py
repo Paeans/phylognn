@@ -27,7 +27,7 @@ def save_dataset(gene_len, step_range, graph_num = None, fname = None):
     
 def save_g2g_dataset(gene_len, step, graph_num = None, fname = None):
     if graph_num == None:
-        graph_num = 1000
+        graph_num = 100
         
     if fname == None:
         fname = 'g2g_' + str(gene_len) + '_' + str(step) + '.pt'
@@ -76,7 +76,7 @@ class GeneGraphDataset(InMemoryDataset):
     def process(self):
         # Read data into huge `Data` list.
         filename = self.raw_dir + '/' + self.raw_file_names[0]
-        gene_list, label = torch.load(filename, map_location=torch.device('cuda'))        
+        gene_list, label = torch.load(filename) #, map_location=torch.device('cuda'))        
         
         data_list = [gen_graph(x, label = inv_num) for x, inv_num in zip(gene_list, label)]
 
@@ -90,7 +90,7 @@ class GeneGraphDataset(InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
         
 class G2GraphDataset(InMemoryDataset):
-    def __init__(self, root, gene_len, step_range, graph_num = 10000):
+    def __init__(self, root, gene_len, step_range, graph_num = 100):
 #                  transform=None, pre_transform=None, pre_filter = None):
         self.gene_len = gene_len
         self.step_range = step_range
@@ -123,7 +123,7 @@ class G2GraphDataset(InMemoryDataset):
     def process(self):
         # Read data into huge `Data` list.
         filename = self.raw_dir + '/' + self.raw_file_names[0]
-        source, target = torch.load(filename, map_location=torch.device('cuda'))        
+        source, target = torch.load(filename) #, map_location=torch.device('cuda'))        
                 
         data_list = [gen_g2g_graph(s, t) for s,t in zip(source, target)]
 

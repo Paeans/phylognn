@@ -7,7 +7,7 @@ from dcj_comp import dcj_dist
 
 from multiprocessing import Pool
 
-device = th.device('cuda')
+device = th.device('cuda' if th.cuda.is_available() else 'cpu')
 
 def revers_mat(size, *p):
     p1, p2 = p[:2]
