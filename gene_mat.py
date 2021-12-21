@@ -4,6 +4,7 @@ import torch as th
 from scipy.io import savemat, loadmat
 
 from dcj_comp import dcj_dist
+from genome_file import encodeAdj
 
 from multiprocessing import Pool
 
@@ -52,6 +53,7 @@ def rand_param(size, op_type):
     if op_type == 2: # reverse operation
         while p[0] == p[1]:
             p = np.random.randint(0,size + 1, size=4).tolist() 
+        return p[:2] 
     elif op_type == 0: # trans reverse
         while p[0] == p[1] or \
         (min(p[0], p[1]) == p[2] and (p[3] == 0 or p[3] % abs(p[0] - p[1]) == 0)) or \
@@ -112,29 +114,46 @@ def gen_op_mat(l, n, rand_op = None):
         
     return np.array(op_list), t_dist
 
-def op_mat(op, l, param):
-    mat_op_list = [trans_rev, trans_mat, revers_mat]
-    return mat_op_list[op](l, *param)
-
-def gen_op_mat_multi(l, n, rand_op = None):
+def gen_op_mat_wb(l, n, rand_op = None):
     
     mat_op_list = [trans_rev, trans_mat, revers_mat]
     if rand_op == None:
         rand_op = np.random.randint(0,3,size = n) 
     else:
         rand_op = np.repeat(rand_op, n)
-    # param_op = [rand_param(l, op_type) for op_type in rand_op]
-
-    with Pool(22) as p:
-        param_op = p.starmap(rand_param, [(l,x) for x in rand_op])
-        op_list = p.starmap(op_mat, [(op, l, param) for op, param in zip(rand_op,param_op)])
+    param_op = [rand_param(l, op_type) for op_type in rand_op]
+    t_dist = [1 if x == 2 else 2 for x in rand_op]
 
     # op_list = np.array([mat_op_list[op](l, *param) 
     #        for op, param in zip(rand_op, param_op)])
+    with Pool(22) as p:
+        op_list = p.starmap(op_mat, [(op, l, param) for op, param in zip(rand_op,param_op)])
+        
+    return np.array(op_list), t_dist, param_op
+
+def op_mat(op, l, param):
+    mat_op_list = [trans_rev, trans_mat, revers_mat]
+    return mat_op_list[op](l, *param)
+
+# def gen_op_mat_multi(l, n, rand_op = None):
     
-    op_list = np.array(op_list)
-    t_dist = [1 if x == 2 else 2 for x in rand_op]
-    return op_list, t_dist
+#     mat_op_list = [trans_rev, trans_mat, revers_mat]
+#     if rand_op == None:
+#         rand_op = np.random.randint(0,3,size = n) 
+#     else:
+#         rand_op = np.repeat(rand_op, n)
+#     # param_op = [rand_param(l, op_type) for op_type in rand_op]
+
+#     with Pool(22) as p:
+#         param_op = p.starmap(rand_param, [(l,x) for x in rand_op])
+#         op_list = p.starmap(op_mat, [(op, l, param) for op, param in zip(rand_op,param_op)])
+
+#     # op_list = np.array([mat_op_list[op](l, *param) 
+#     #        for op, param in zip(rand_op, param_op)])
+    
+#     op_list = np.array(op_list)
+#     t_dist = [1 if x == 2 else 2 for x in rand_op]
+#     return op_list, t_dist
 
 
 def gen_dataset(l,n, repeat = 1):
@@ -176,6 +195,39 @@ def gen_dataset_wt(l,n, step = 1, op_type = None):
         s[:, i:(i+1)] = new_seq.cpu().numpy()
         t[:, i] = new_t
     return s, o, t
+
+def gen_bp(seq, bp):
+    b = np.zeros(len(seq)*2)
+    
+    bp = [x * 2 for x in bp]
+    bp += [x + 1 for x in bp]
+    seq_index = encodeAdj(seq)[bp]
+    seq_index = seq_index[seq_index >= 0]
+    
+    b[seq_index] = 1
+    
+    return b
+
+def gen_dataset_wb(l,n, step = 1, op_type = None, device = None):
+    s = np.zeros((n, step, l))
+    b = np.zeros((n, step, l * 2))
+    t = np.zeros((n, step))
+    
+    s[:,0:1] = gen_seqs(l,n)
+    t[:, 0] = 0
+    new_seq = th.tensor(s[:,0:1], dtype = th.float, device = device)
+    
+    o = np.repeat(np.expand_dims(np.identity(l), (0,1)), n, axis = 0)
+    
+    for i in range(1, step):
+        new_o, new_t, bp_list = gen_op_mat_wb(s.shape[-1], s.shape[0], op_type)
+        
+        b[:, i:(i+1)] = [[gen_bp(seq[0], bp)] for seq, bp in zip(new_seq, bp_list)]
+                
+        new_seq = th.matmul(new_seq, th.tensor(new_o, dtype = th.float, device = device))
+        s[:, i:(i+1)] = new_seq.cpu().numpy()
+        t[:, i] = new_t
+    return s, o, t, b
 
 
 def gen_data_file(l,n,repeat,filename):
