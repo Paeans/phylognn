@@ -51,6 +51,12 @@ from genome_file import encodeAdj
 #         arc.set_alpha(0.3)
 #     plt.show()
 
+def gen_g2b_graph(genome, label = None, node_label = None):
+    graph_data = gen_graph(genome, label)
+    graph_data.node_label = torch.tensor(node_label, dtype = torch.long)
+        
+    return graph_data
+
 def gen_graph(genome, label = None): # label number
     gene_adj = [encodeAdj(gene) for gene in genome]
     num_edges = np.sum([len(g) - 3 for g in gene_adj])

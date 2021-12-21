@@ -208,9 +208,10 @@ def gen_bp(seq, bp):
     
     return b
 
-def gen_dataset_wb(l,n, step = 1, op_type = None, device = None):
+def gen_dataset_wb(l,n, step = 1, op_type = None): # , device = None):
     s = np.zeros((n, step, l))
     b = np.zeros((n, step, l * 2))
+    # tmp_b = np.zeros((n, step, l * 2))
     t = np.zeros((n, step))
     
     s[:,0:1] = gen_seqs(l,n)
@@ -222,8 +223,13 @@ def gen_dataset_wb(l,n, step = 1, op_type = None, device = None):
     for i in range(1, step):
         new_o, new_t, bp_list = gen_op_mat_wb(s.shape[-1], s.shape[0], op_type)
         
-        b[:, i:(i+1)] = [[gen_bp(seq[0], bp)] for seq, bp in zip(new_seq, bp_list)]
-                
+        with Pool(22) as p:
+            b[:, i] = p.starmap(gen_bp, [(seq[0], bp) 
+                                             for seq, bp in 
+                                             zip(new_seq.cpu().numpy(), bp_list)])
+        # b[:, i:(i+1)] = [[gen_bp(seq[0], bp)] for seq, bp in zip(new_seq, bp_list)]
+        # b[:, i] = [ gen_bp(seq[0], bp) for seq, bp in zip(new_seq, bp_list)]
+        
         new_seq = th.matmul(new_seq, th.tensor(new_o, dtype = th.float, device = device))
         s[:, i:(i+1)] = new_seq.cpu().numpy()
         t[:, i] = new_t
