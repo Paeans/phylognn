@@ -179,7 +179,7 @@ def rev_trans(g, p1 = None, p2 = None):
         p2 = random.randint(start, end)
     return trans_op(g, p1, p2)
 
-def encodeAdj(genome):
+def encodeAdj_old(genome):
     l = len(genome)
     adjacency = np.zeros(l*2 + 2, dtype=np.int32)
     adjacency[0] = -1
@@ -194,6 +194,23 @@ def encodeAdj(genome):
             adjacency[i*2 + 2] = -genin - 2
 
     adjacency[l * 2 + 1] = -2
+    if l>= 2 and genome[0] == genome[-1]:
+        # cicle
+        return np.delete(adjacency, -2)
+    return adjacency
+
+def encodeAdj(genome):
+    l = len(genome)
+    adjacency = np.zeros(l*2 + 2, dtype = np.int32)
+    adjH = np.abs(genome) * 2 - 1
+    
+    t = np.zeros(l)
+    t[np.array(genome) > 0] = 1
+    
+    adjacency[1:-1] = np.stack((adjH - t, adjH + t - 1)).flatten('F')
+    
+    adjacency[0] = -1
+    adjacency[-1] = -2
     if l>= 2 and genome[0] == genome[-1]:
         # cicle
         return np.delete(adjacency, -2)

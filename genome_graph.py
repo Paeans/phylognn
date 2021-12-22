@@ -53,7 +53,7 @@ from genome_file import encodeAdj
 
 def gen_g2b_graph(genome, label = None, node_label = None):
     graph_data = gen_graph(genome, label)
-    graph_data.node_label = torch.tensor(node_label, dtype = torch.long)
+    graph_data.node_label = torch.tensor(node_label, dtype = torch.float)
         
     return graph_data
 
