@@ -5,7 +5,7 @@ import networkx as nx
 
 from torch_geometric.data import Data
 from torch_geometric.utils.convert import to_networkx
-from torch_geometric.utils import negative_sampling
+from torch_geometric.utils import negative_sampling, add_self_loops
 
 import matplotlib.pyplot as plt
 
@@ -127,9 +127,9 @@ def gen_g2g_graph(genome, target):
                       # dtype = torch.float, num_nodes = node_num)
     target_graph = gen_graph([target], 0)
     graph_data.pos_edge_label_index = target_graph.edge_index
-    graph_data.neg_edge_label_index = negative_sampling(target_graph.edge_index, 
+    graph_data.neg_edge_label_index, _ = add_self_loops(negative_sampling(target_graph.edge_index, 
                                                         target_graph.num_nodes,
-                                                        target_graph.num_nodes**2)
+                                                        target_graph.num_nodes**2))
     
     # add self-loops
         
