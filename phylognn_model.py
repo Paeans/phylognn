@@ -44,34 +44,3 @@ class G2Braph(torch.nn.Module):
         # x = global_add_pool(x, batch)        
         return self.mlp(x)
     
-class G3Median(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, deg):
-        super(G3Median, self).__init__()
-
-        self.node_emb = Embedding(10000, 75)
-
-        aggregators = ['mean', 'min', 'max', 'std']
-        scalers = ['identity', 'amplification', 'attenuation']
-        
-        self.conv_mu = GCNConv(75, out_channels)
-        self.conv_logstd = GCNConv(75, out_channels)
-        
-        self.convs = ModuleList()
-        self.batch_norms = ModuleList()
-        for _ in range(4):
-            conv = PNAConv(in_channels=75, out_channels=75,
-                           aggregators=aggregators, scalers=scalers, deg=deg,
-                           # edge_dim=50, 
-                           towers=5, pre_layers=1, post_layers=1,
-                           divide_input=False)
-            # conv = GCNConv(in_channels=75, out_channels=75)
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(75))
-
-    def forward(self, x, edge_index): #, edge_attr, batch):
-        
-        x = self.node_emb(x.squeeze())
-
-        for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = batch_norm(conv(x, edge_index)).relu()
-        return self.conv_mu(x, edge_index), self.conv_logstd(x, edge_index)
