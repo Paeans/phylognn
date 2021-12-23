@@ -61,7 +61,24 @@ def save_g2g_dataset(gene_len, step, graph_num = None, fname = None):
         source[dist * graph_num : (dist + 1) * graph_num] = s[:, (0, -1)]
         target[dist * graph_num : (dist + 1) * graph_num] = s[:, 1]
     torch.save((source, target), fname)
+
+def save_g3m_dataset(gene_len, step, graph_num = None, fname = None):
+    if graph_num == None:
+        graph_num = 100
+        
+    if fname == None:
+        fname = 'g3m_' + str(gene_len) + '_' + str(step) + '.pt'
     
+    source = np.zeros((graph_num * step, 3, gene_len), dtype = np.int32) 
+    target = np.zeros((graph_num * step, gene_len), dtype = np.int32)
+    
+    for dist in range(0, step):
+        m_seq, t_seq = gen_m3g_data(gene_len, graph_num, step, op_type = 2)
+        source[dist * graph_num : (dist + 1) * graph_num] = m_seq
+        target[dist * graph_num : (dist + 1) * graph_num] = t_seq.squeeze()
+        
+    torch.save((source, target), fname)
+
 class GeneGraphDataset(InMemoryDataset):
     def __init__(self, root, gene_len, step_range, graph_num = 100):
 #                  transform=None, pre_transform=None, pre_filter = None):
@@ -203,3 +220,29 @@ class G2GraphDataset(InMemoryDataset):
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
+        
+class G3MedianDataset(G2GraphDataset):
+    def __init__(self, root, gene_len, step_range, graph_num = 100):
+        super().__init__(root, gene_len, step_range, graph_num)
+        # self.data, self.slices = torch.load(self.processed_paths[0])
+        
+    @property
+    def raw_file_names(self):
+        return ['g3raw_' + str(self.gene_len) +
+                '_' + str(self.step_range) + '.pt']
+
+    @property
+    def processed_file_names(self):
+        return ['g3dat_' + str(self.gene_len) +
+                '_' + str(self.step_range) + '.pt']
+
+    def download(self):
+        # Download to `self.raw_dir`.
+        print('Generating...', file=sys.stderr)
+        save_g3m_dataset(self.gene_len, self.step_range, 
+                     graph_num = self.graph_num, 
+                     fname = self.raw_dir + '/' + self.raw_file_names[0])
+        pass
+
+    def process(self):
+        super().process()
