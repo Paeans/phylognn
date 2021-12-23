@@ -131,4 +131,3 @@ dmypy.json
 *.mat
 data/
 *dataset*/
-runs/
