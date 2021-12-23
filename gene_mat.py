@@ -261,3 +261,35 @@ def gen_g2g_data(gene_len, graph_num, step, op_type):
         l += size
         if l>=graph_num:
             return res
+        
+def mid_dcj(s, p):
+    dlist = [dcj_dist(s, x)[-1] for x in p]
+    cand_len = len(p)
+    dists = [dcj_dist(p[i], p[j])[-1] for i in range(cand_len) for j in range(i + 1, cand_len)]
+    # a, b, c = p
+    return sum(dlist) == np.ceil(sum(dists)/2)
+
+def gene_mid(s, cand_seqs, mid_num = 3):
+    cand_len = len(cand_seqs)
+    cnum = np.random.choice(cand_len, mid_num, replace = False)
+    while not mid_dcj(s, cand_seqs[cnum].squeeze()):
+        cnum = np.random.choice(cand_len, mid_num, replace = False)
+    return cand_seqs[cnum]
+
+def gen_m3g_data(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
+    seq = gen_seqs(gene_len, graph_num)
+    
+    new_seq = np.zeros((graph_num, k * step, 1, gene_len)) # graph_num, k * step, 1, gene_len
+    tmp_seq = np.expand_dims(seq, axis = 1) # graph_num, 1, 1, gene_len
+    for i in range(step):
+        op = gen_op_mat(gene_len, graph_num * k, 
+                        op_type)[0].reshape(graph_num, k, 
+                                            gene_len, gene_len) # graph_num, k, gene_len, gene_len
+        tmp_seq = np.matmul(tmp_seq, op) # graph_num, k, 1, gene_len
+        new_seq[:, i * k:(i+1) * k] = tmp_seq
+        
+    with Pool(22) as p:
+        mid_seq = p.starmap(gene_mid, [(s[0], ns, mid_num) for s, ns in zip(seq, new_seq)])
+        # graph_num, mid_num, 1, gene_len
+        
+    return np.array(mid_seq).squeeze(axis = -2), seq
