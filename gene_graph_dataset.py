@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import torch
 
-from gene_mat import gen_dataset_wt, gen_dataset_wb, gen_g2g_data
+from gene_mat import gen_dataset_wt, gen_dataset_wb, gen_g2g_data, gen_m3g_data
 from genome_graph import gen_graph, gen_g2g_graph, gen_g2b_graph
 
 from torch_geometric.data import InMemoryDataset
@@ -62,18 +62,21 @@ def save_g2g_dataset(gene_len, step, graph_num = None, fname = None):
         target[dist * graph_num : (dist + 1) * graph_num] = s[:, 1]
     torch.save((source, target), fname)
 
-def save_g3m_dataset(gene_len, step, graph_num = None, fname = None):
+def save_g3m_dataset(gene_len, step, graph_num = None, fname = None, mid_num = None):
     if graph_num == None:
         graph_num = 100
         
     if fname == None:
         fname = 'g3m_' + str(gene_len) + '_' + str(step) + '.pt'
+        
+    if mid_num == None:
+        mid_num = 3
     
-    source = np.zeros((graph_num * step, 3, gene_len), dtype = np.int32) 
+    source = np.zeros((graph_num * step, mid_num, gene_len), dtype = np.int32) 
     target = np.zeros((graph_num * step, gene_len), dtype = np.int32)
     
     for dist in range(0, step):
-        m_seq, t_seq = gen_m3g_data(gene_len, graph_num, step, op_type = 2)
+        m_seq, t_seq = gen_m3g_data(gene_len, graph_num, step, op_type = 2, mid_num = mid_num)
         source[dist * graph_num : (dist + 1) * graph_num] = m_seq
         target[dist * graph_num : (dist + 1) * graph_num] = t_seq.squeeze()
         
@@ -222,8 +225,9 @@ class G2GraphDataset(InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
         
 class G3MedianDataset(G2GraphDataset):
-    def __init__(self, root, gene_len, step_range, graph_num = 100):
-        super().__init__(root, gene_len, step_range, graph_num)
+    def __init__(self, root, gene_len, step_range, graph_num = 100, mid_num = 3):
+        self.mid_num = mid_num if mid_num >= 3 else 3
+        super().__init__(root + '_' + str(self.mid_num), gene_len, step_range, graph_num)
         # self.data, self.slices = torch.load(self.processed_paths[0])
         
     @property
@@ -241,7 +245,8 @@ class G3MedianDataset(G2GraphDataset):
         print('Generating...', file=sys.stderr)
         save_g3m_dataset(self.gene_len, self.step_range, 
                      graph_num = self.graph_num, 
-                     fname = self.raw_dir + '/' + self.raw_file_names[0])
+                     fname = self.raw_dir + '/' + self.raw_file_names[0],
+                     mid_num = self.mid_num)
         pass
 
     def process(self):
