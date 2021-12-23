@@ -280,13 +280,15 @@ def gen_m3g_data(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
     seq = gen_seqs(gene_len, graph_num)
     
     new_seq = np.zeros((graph_num, k * step, 1, gene_len)) # graph_num, k * step, 1, gene_len
-    tmp_seq = np.expand_dims(seq, axis = 1) # graph_num, 1, 1, gene_len
+    # tmp_seq = np.expand_dims(seq, axis = 1) # graph_num, 1, 1, gene_len
+    tmp_seq = th.tensor(np.expand_dims(seq, axis = 1), dtype = th.float, device = device)
     for i in range(step):
         op = gen_op_mat(gene_len, graph_num * k, 
                         op_type)[0].reshape(graph_num, k, 
                                             gene_len, gene_len) # graph_num, k, gene_len, gene_len
-        tmp_seq = np.matmul(tmp_seq, op) # graph_num, k, 1, gene_len
-        new_seq[:, i * k:(i+1) * k] = tmp_seq
+        # tmp_seq = np.matmul(tmp_seq, op) # graph_num, k, 1, gene_len
+        tmp_seq = th.matmul(tmp_seq, th.tensor(op, dtype = th.float, device = device))
+        new_seq[:, i * k:(i+1) * k] = tmp_seq.cpu().numpy() # tmp_seq
         
     with Pool(22) as p:
         mid_seq = p.starmap(gene_mid, [(s[0], ns, mid_num) for s, ns in zip(seq, new_seq)])
