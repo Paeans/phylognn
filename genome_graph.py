@@ -89,7 +89,7 @@ def gen_graph(genome, label = None): # label number
                       edge_index = torch.tensor(graph_adj, dtype = torch.long), 
                       edge_attr = torch.tensor(edge_attr),
                       dtype = torch.long, num_nodes = node_num)
-    graph_data.y = torch.tensor([label], dtype = torch.long)
+    graph_data.y = torch.tensor([label if label else 0], dtype = torch.long)
         
     return graph_data
         
