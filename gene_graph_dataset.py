@@ -8,6 +8,8 @@ from genome_graph import gen_graph, gen_g2g_graph, gen_g2b_graph
 
 from torch_geometric.data import InMemoryDataset
 
+from multiprocessing import Pool
+
 def save_dataset(gene_len, step_range, graph_num = None, fname = None):
     if graph_num == None:
         graph_num = 100
@@ -118,7 +120,9 @@ class GeneGraphDataset(InMemoryDataset):
         filename = self.raw_dir + '/' + self.raw_file_names[0]
         gene_list, label = torch.load(filename) #, map_location=torch.device('cuda'))        
         
-        data_list = [gen_graph(x, label = inv_num) for x, inv_num in zip(gene_list, label)]
+        # data_list = [gen_graph(x, label = inv_num) for x, inv_num in zip(gene_list, label)]
+        with Pool(22) as p:
+            data_list = p.starmap(gen_graph, [(x, inv_num) for x, inv_num in zip(gene_list, label)])
 
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]
@@ -165,8 +169,12 @@ class G2BraphDataset(InMemoryDataset):
         filename = self.raw_dir + '/' + self.raw_file_names[0]
         gene_list, label, node_label = torch.load(filename) #, map_location=torch.device('cuda'))        
         
-        data_list = [gen_g2b_graph(x, label = inv_num, node_label = t_label) 
-                     for x, inv_num, t_label in zip(gene_list, label, node_label)]
+        # data_list = [gen_g2b_graph(x, label = inv_num, node_label = t_label) 
+                     # for x, inv_num, t_label in zip(gene_list, label, node_label)]
+        with Pool(22) as p:
+            data_list = p.starmap(gen_g2b_graph, 
+                                  [(x, inv_num, t_label) 
+                                   for x, inv_num, t_label in zip(gene_list, label, node_label)])
 
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]
@@ -213,7 +221,9 @@ class G2GraphDataset(InMemoryDataset):
         filename = self.raw_dir + '/' + self.raw_file_names[0]
         source, target = torch.load(filename) #, map_location=torch.device('cuda'))        
                 
-        data_list = [gen_g2g_graph(s, t) for s,t in zip(source, target)]
+        # data_list = [gen_g2g_graph(s, t) for s,t in zip(source, target)]
+        with Pool(22) as p:
+            data_list = p.starmap(gen_g2g_graph, [(s, t) for s, t in zip(source, target)])
 
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]
