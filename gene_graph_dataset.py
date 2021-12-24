@@ -78,7 +78,7 @@ def save_g3m_dataset(gene_len, step, graph_num = None, fname = None, mid_num = N
     target = np.zeros((graph_num * step, gene_len), dtype = np.int32)
     
     for dist in range(0, step):
-        m_seq, t_seq = gen_m3g_data(gene_len, graph_num, step, op_type = 2, mid_num = mid_num)
+        m_seq, t_seq = gen_m3g_data(gene_len, graph_num, dist + 1, op_type = 2, mid_num = mid_num)
         source[dist * graph_num : (dist + 1) * graph_num] = m_seq
         target[dist * graph_num : (dist + 1) * graph_num] = t_seq.squeeze()
         
