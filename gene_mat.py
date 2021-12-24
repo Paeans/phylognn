@@ -126,16 +126,16 @@ def gen_op_mat_wb(l, n, rand_op = None):
     param_op = [rand_param(l, op_type) for op_type in rand_op]
     t_dist = [1 if x == 2 else 2 for x in rand_op]
 
-    # op_list = np.array([mat_op_list[op](l, *param) 
-    #        for op, param in zip(rand_op, param_op)])
-    with Pool(22) as p:
-        op_list = p.starmap(op_mat, [(op, l, param) for op, param in zip(rand_op,param_op)])
+    op_list = np.array([mat_op_list[op](l, *param) 
+           for op, param in zip(rand_op, param_op)])
+    # with Pool(22) as p:
+        # op_list = p.starmap(op_mat, [(op, l, param) for op, param in zip(rand_op,param_op)])
         
     return np.array(op_list), t_dist, param_op
 
-def op_mat(op, l, param):
-    mat_op_list = [trans_rev, trans_mat, revers_mat]
-    return mat_op_list[op](l, *param)
+# def op_mat(op, l, param):
+#     mat_op_list = [trans_rev, trans_mat, revers_mat]
+#     return mat_op_list[op](l, *param)
 
 # def gen_op_mat_multi(l, n, rand_op = None):
     
