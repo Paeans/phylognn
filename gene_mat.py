@@ -106,12 +106,14 @@ def gen_op_mat(l, n, rand_op = None):
         rand_op = np.repeat(rand_op, n)
     param_op = [rand_param(l, op_type) for op_type in rand_op]
     t_dist = [1 if x == 2 else 2 for x in rand_op]
-
-    # op_list = np.array([mat_op_list[op](l, *param) 
-    #        for op, param in zip(rand_op, param_op)])
-    with Pool(22) as p:
-        op_list = p.starmap(op_mat, [(op, l, param) for op, param in zip(rand_op,param_op)])
-        
+    
+    print('gom', n, time.ctime())
+    op_list = np.array([mat_op_list[op](l, *param) 
+           for op, param in zip(rand_op, param_op)])
+    
+    # with Pool(22) as p:
+        # op_list = p.starmap(op_mat, [(op, l, param) for op, param in zip(rand_op,param_op)])
+    print('gom', n, time.ctime())    
     return np.array(op_list), t_dist
 
 def gen_op_mat_wb(l, n, rand_op = None):
@@ -276,22 +278,24 @@ def gene_mid(s, cand_seqs, mid_num = 3):
         cnum = np.random.choice(cand_len, mid_num, replace = False)
     return cand_seqs[cnum]
 
+import time
+
 def gen_m3g_data(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
     seq = gen_seqs(gene_len, graph_num)
     
     new_seq = np.zeros((graph_num, k * step, 1, gene_len)) # graph_num, k * step, 1, gene_len
-    # tmp_seq = np.expand_dims(seq, axis = 1) # graph_num, 1, 1, gene_len
-    tmp_seq = th.tensor(np.expand_dims(seq, axis = 1), dtype = th.float, device = device)
+    tmp_seq = np.expand_dims(seq, axis = 1) # graph_num, 1, 1, gene_len
+    # tmp_seq = th.tensor(np.expand_dims(seq, axis = 1), dtype = th.float, device = device)
     for i in range(step):
         op = gen_op_mat(gene_len, graph_num * k, 
                         op_type)[0].reshape(graph_num, k, 
                                             gene_len, gene_len) # graph_num, k, gene_len, gene_len
-        # tmp_seq = np.matmul(tmp_seq, op) # graph_num, k, 1, gene_len
-        tmp_seq = th.matmul(tmp_seq, th.tensor(op, dtype = th.float, device = device))
-        new_seq[:, i * k:(i+1) * k] = tmp_seq.cpu().numpy() # tmp_seq
-        
-    with Pool(22) as p:
+        tmp_seq = np.matmul(tmp_seq, op) # graph_num, k, 1, gene_len
+        # tmp_seq = th.matmul(tmp_seq, th.tensor(op, dtype = th.float, device = device))
+        new_seq[:, i * k:(i+1) * k] = tmp_seq # .cpu().numpy() # tmp_seq
+    print(step, time.ctime())    
+    with Pool(10) as p:
         mid_seq = p.starmap(gene_mid, [(s[0], ns, mid_num) for s, ns in zip(seq, new_seq)])
         # graph_num, mid_num, 1, gene_len
-        
+    print(step, time.ctime())    
     return np.array(mid_seq).squeeze(axis = -2), seq
