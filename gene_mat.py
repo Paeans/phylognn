@@ -279,8 +279,6 @@ def gene_mid(s, cand_seqs, mid_num = 3):
         cnum = np.random.choice(cand_len, mid_num, replace = False)
     return cand_seqs[cnum]
 
-import time
-
 def gen_m3g_data(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
     seq = gen_seqs(gene_len, graph_num)
     
@@ -294,10 +292,10 @@ def gen_m3g_data(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
         tmp_seq = np.matmul(tmp_seq, op) # graph_num, k, 1, gene_len
         # tmp_seq = th.matmul(tmp_seq, th.tensor(op, dtype = th.float, device = device))
         new_seq[:, i * k:(i+1) * k] = tmp_seq # .cpu().numpy() # tmp_seq
-    print(step, time.ctime())    
+       
     # with Pool(10) as p:
         # mid_seq = p.starmap(gene_mid, [(s[0], ns, mid_num) for s, ns in zip(seq, new_seq)])
         # graph_num, mid_num, 1, gene_len
     mid_seq = [gene_mid(s[0], ns, mid_num) for s, ns in zip(seq, new_seq)]
-    print(step, time.ctime())    
+    
     return np.array(mid_seq).squeeze(axis = -2), seq
