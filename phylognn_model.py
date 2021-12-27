@@ -64,7 +64,7 @@ class G3Median(torch.nn.Module):
                            # edge_dim=50, 
                            towers=5, pre_layers=1, post_layers=1,
                            divide_input=False)
-            # conv = GCNConv(in_channels=75, out_channels=75)
+            
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(75))
 
@@ -91,11 +91,6 @@ class G3Median_GCNConv(torch.nn.Module):
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
         for _ in range(4):
-            # conv = PNAConv(in_channels=75, out_channels=75,
-            #                aggregators=aggregators, scalers=scalers, deg=deg,
-            #                # edge_dim=50, 
-            #                towers=5, pre_layers=1, post_layers=1,
-            #                divide_input=False)
             conv = GCNConv(in_channels=75, out_channels=75)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(75))
