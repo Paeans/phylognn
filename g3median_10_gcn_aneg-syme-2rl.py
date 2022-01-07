@@ -1,9 +1,11 @@
 import time
 
+import numpy as np
+
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from torch_geometric.nn import VGAE
+# from torch_geometric.nn import VGAE
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import (degree, negative_sampling, 
                                   add_self_loops, to_undirected)
@@ -11,70 +13,74 @@ from torch_geometric.utils import (degree, negative_sampling,
 from torch.utils.tensorboard import SummaryWriter
 
 from gene_graph_dataset import G3MedianDataset
-from phylognn_model import G3Median_GCNConv
+from phylognn_model import G3Median_GCNConv, G3Median_VGAE
 
+from sklearn.metrics import (roc_auc_score, roc_curve,
+                             average_precision_score, 
+                             precision_recall_curve,
+                             f1_score, matthews_corrcoef)
+
+from sklearn.model_selection import KFold
+
+import matplotlib.pyplot as plt
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument("--gpuid", type=int)
-parser.add_argument("--run", type=int)
+parser.add_argument("--gpuid", type=int, default = 0)
+# parser.add_argument("--run", type=int)
 parser.add_argument("--seqlen", type=int)
+parser.add_argument("--rate", type=float, default = 0.1)
+parser.add_argument("--samples", type=int, default = 1000)
+parser.add_argument("--epoch", type=int, default=1000)
+parser.add_argument("--cvsplit", type=int, default=5)
 args = parser.parse_args()
 
 
 gpuid = args.gpuid # 0
 
-train_p, test_p, val_p = 0.7, 0.2, 0.1
+# train_p, test_p, val_p = 0.7, 0.2, 0.1
 train_batch, test_batch, val_batch = 128, 64, 8
 
 device = torch.device('cuda:' + str(gpuid) if torch.cuda.is_available() else 'cpu')
 
-dataset = G3MedianDataset('dataset_g3m', 10, 10, args.seqlen//10)
+dataset = G3MedianDataset('dataset_g3m', args.seqlen, int(args.seqlen * args.rate), args.samples)
+
+in_channels, out_channels = None, 16
 
 data_size = len(dataset)
-train_size, test_size, val_size = ((int)(data_size * train_p), 
-                                   (int)(data_size * test_p), 
-                                   (int)(data_size * val_p))
-print(data_size)
+# train_size, test_size, val_size = ((int)(data_size * train_p), 
+#                                    (int)(data_size * test_p), 
+#                                    (int)(data_size * val_p))
+
+print(f'dataset size: {data_size:0>5}')
 dataset = dataset.shuffle()
-train_dataset = dataset[:train_size]
-test_dataset = dataset[train_size:(train_size + test_size)]
-val_dataset = dataset[(train_size + test_size):(train_size + test_size + val_size)]
 
-test_dataset = list(test_dataset)
-for t in test_dataset:
-    t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
-    t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
-                                        t.num_nodes,
-                                        t.num_nodes**2)
-train_dataset = list(train_dataset)
-for t in train_dataset:
-    t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
-    t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
-                                        t.num_nodes,
-                                        t.num_nodes**2)
-val_dataset = list(val_dataset)
-for t in val_dataset:
-    t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
-    t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
-                                        t.num_nodes,
-                                        t.num_nodes**2)
+# train_dataset = dataset[:train_size]
+# test_dataset = dataset[train_size:(train_size + test_size)]
+# val_dataset = dataset[(train_size + test_size):(train_size + test_size + val_size)]
+
+# test_dataset = list(test_dataset)
+# for t in test_dataset:
+#     t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
+#     t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
+#                                         t.num_nodes,
+#                                         t.num_nodes**2)
+# train_dataset = list(train_dataset)
+# for t in train_dataset:
+#     t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
+#     t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
+#                                         t.num_nodes,
+#                                         t.num_nodes**2)
+# val_dataset = list(val_dataset)
+# for t in val_dataset:
+#     t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
+#     t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
+#                                         t.num_nodes,
+#                                         t.num_nodes**2)
     
-train_loader = DataLoader(train_dataset, batch_size = train_batch, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size = test_batch)
-val_loader = DataLoader(val_dataset, batch_size= val_batch)
 
-in_channels, out_channels = dataset.num_features, 16
-
-model = VGAE(G3Median_GCNConv(in_channels, out_channels)).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=30,
-                              min_lr=0.00001)
-
-writer = SummaryWriter(log_dir='runs_g3m_10/g3median_' + str(args.seqlen) + '_gcn_aneg_syme_2rl_run' + str(args.run))
-
-from torch_geometric.data import Batch
-def train(train_loader):
+# from torch_geometric.data import Batch
+def train(model, train_loader):
     model.train()
     
     total_loss = 0
@@ -93,7 +99,7 @@ def train(train_loader):
     return total_loss/len(train_loader)
 
 @torch.no_grad()
-def test(test_loader):
+def test(model, test_loader):
     model.eval()
     auc, ap = 0, 0
     
@@ -111,7 +117,25 @@ def test(test_loader):
     return auc/len(test_loader), ap/len(test_loader)
 
 @torch.no_grad()
-def val(val_loader):
+def predict(model, test_loader):
+    model.eval()
+    y_list, pred_list = [], []
+    
+    for data in test_loader:
+        
+        data = data.to(device)
+        
+        z = model.encode(data.x, data.edge_index)
+        # loss += model.recon_loss(z, data.pos_edge_label_index, data.neg_edge_label_index)
+        y, pred = model.pred(z, data.pos_edge_label_index, data.neg_edge_label_index)
+        
+        y_list.append(y)
+        pred_list.append(pred)
+        
+    return y_list, pred_list
+
+@torch.no_grad()
+def val(model, val_loader):
     model.eval()
     loss = 0
     
@@ -125,25 +149,89 @@ def val(val_loader):
                 
     return loss/len(val_loader)
 
-for epoch in range(1, 1000 + 1):
-    # print(f'{time.ctime()} - Epoch: {epoch:04d}')
-    loss = train(train_loader)
-    # print(f'{time.ctime()} - \t train loss: {loss:.6f}')
-    tloss = val(val_loader)
-    # print(f'{time.ctime()} - \t val   loss: {tloss:.6f}')
-    if epoch > 800:
-        scheduler.step(tloss)
-    
-    writer.add_scalar('Loss/train', loss, epoch)
-    writer.add_scalar('Loss/val', tloss, epoch)
-    
-    
-    auc, ap = test(test_dataset)
-    
-    writer.add_scalar('AUC/test', auc, epoch)
-    writer.add_scalar('AP/test', ap, epoch)
-    
-    if epoch % 50 == 0:
-        print(f'{time.ctime()} - Epoch: {epoch:04d}        auc: {auc:.6f}, ap: {ap:.6f}')
+def cal_accuracy(y_list, pred_list):
+    pred_accuracy = np.zeros((len(y_list), 2))
+    for i in range(len(y_list)):
+        y, pred = y_list[i], pred_list[i]
+        pred_accuracy[i] = [roc_auc_score(y, pred), 
+                            average_precision_score(y, pred)]
         
-writer.close()
+    auc_figure = plt.figure(figsize=(12,12))
+    
+    for i in range(len(y_list)):
+        y, pred = y_list[i], pred_list[i]
+        fpr, tpr, _ = roc_curve(y, pred)
+        plt.plot(fpr, tpr, color='g', lw=0.3)
+    
+    plt.plot([0, 1], [0, 1], color="navy", lw=0.3, linestyle="--")
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.01])
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title(f'Receiver Operating Characteristic ({pred_accuracy.mean(axis = 0)[0]:.4f})')
+    # plt.legend(loc="lower right")
+    
+    ap_figure = plt.figure(figsize=(12,12))
+    for i in range(len(y_list)):
+        y, pred = y_list[i], pred_list[i]
+        prc, rec, _ = precision_recall_curve(y, pred)
+        plt.plot(rec, prc, color='c', lw=0.3)
+        
+    plt.plot([0, 1], [0, 1], color="navy", lw=0.3, linestyle="--")
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.01])
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title(f'Precision-Recall Curve ({pred_accuracy.mean(axis = 0)[1]:.4f})')
+    
+    
+    return pred_accuracy, [auc_figure, ap_figure] #, ('auc', 'ap')
+
+counter = 1
+for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
+    
+    print(f'{time.ctime()} -- fold: {counter:0>2}')
+    
+    model = G3Median_VGAE(G3Median_GCNConv(in_channels, out_channels)).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=30,
+                                  min_lr=0.00001)
+
+    writer = SummaryWriter(log_dir='runs_g3median_' f'{args.seqlen:0>4}' '/rate' '_' 
+                           f'{args.rate:0>3.1f}' '_' 'run' f'{counter:0>2}')
+    
+    train_dataset = dataset[train_index]
+    test_dataset = dataset[test_index]
+    
+    train_dataset = train_dataset[:int(len(train_dataset) * 0.9)]
+    val_dataset = train_dataset[int(len(train_dataset) * 0.9):]
+    
+    train_loader = DataLoader(train_dataset, batch_size = train_batch, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size = test_batch)
+    val_loader = DataLoader(val_dataset, batch_size = val_batch)
+    
+    
+    for epoch in range(1, args.epoch + 1):
+        # print(f'{time.ctime()} - Epoch: {epoch:04d}')
+        loss = train(model, train_loader)
+        # print(f'{time.ctime()} - \t train loss: {loss:.6f}')
+        tloss = val(model, val_loader)
+        # print(f'{time.ctime()} - \t val   loss: {tloss:.6f}')
+        scheduler.step(tloss)
+
+        writer.add_scalar('loss/train', loss, epoch)
+        writer.add_scalar('loss/val', tloss, epoch)
+
+
+        y_list, pred_list = predict(model, test_loader)
+        
+        pred_acc, figures = cal_accuracy(y_list, pred_list)
+        auc, ap = np.mean(pred_acc, axis = 0)
+
+        writer.add_scalar('auc/test', auc, epoch)
+        writer.add_scalar('ap/test', ap, epoch)
+        
+        writer.add_figure('roc/test', figures[0], epoch)
+        writer.add_figure('pr/test', figures[1], epoch)
+    writer.close()
+    counter += 1
