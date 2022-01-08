@@ -52,7 +52,7 @@ data_size = len(dataset)
 #                                    (int)(data_size * test_p), 
 #                                    (int)(data_size * val_p))
 
-print(f'dataset size: {data_size:0>5}')
+# print(f'dataset size: {data_size:0>5}')
 dataset = dataset.shuffle()
 
 # train_dataset = dataset[:train_size]
@@ -150,42 +150,52 @@ def val(model, val_loader):
     return loss/len(val_loader)
 
 def cal_accuracy(y_list, pred_list):
-    pred_accuracy = np.zeros((len(y_list), 2))
-    for i in range(len(y_list)):
-        y, pred = y_list[i], pred_list[i]
-        pred_accuracy[i] = [roc_auc_score(y, pred), 
-                            average_precision_score(y, pred)]
-        
-    auc_figure = plt.figure(figsize=(12,12))
+    # pred_accuracy = np.zeros((len(y_list), 2))
+    # for i in range(len(y_list)):
+    #     y, pred = y_list[i], pred_list[i]
+    #     pred_accuracy[i] = [roc_auc_score(y, pred), 
+    #                         average_precision_score(y, pred)]
     
-    for i in range(len(y_list)):
-        y, pred = y_list[i], pred_list[i]
-        fpr, tpr, _ = roc_curve(y, pred)
-        plt.plot(fpr, tpr, color='g', lw=0.3)
+    figsize = (6,6)
+        
+    y, pred = np.concatenate([[t, p] for t, p in zip(y_list, pred_list)], axis = -1)
+    auc, ap = roc_auc_score(y, pred), average_precision_score(y, pred)
+        
+    auc_figure = plt.figure(figsize=figsize)
+    
+    fpr, tpr, _ = roc_curve(y, pred)
+    plt.plot(fpr, tpr, color='g', lw=0.3)
+    # for i in range(len(y_list)):
+    #     y, pred = y_list[i], pred_list[i]
+    #     fpr, tpr, _ = roc_curve(y, pred)
+    #     plt.plot(fpr, tpr, color='g', lw=0.3)
     
     plt.plot([0, 1], [0, 1], color="navy", lw=0.3, linestyle="--")
     plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.01])
+    plt.ylim([0.0, 1.0])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-    plt.title(f'Receiver Operating Characteristic ({pred_accuracy.mean(axis = 0)[0]:.4f})')
+    plt.title(f'Receiver Operating Characteristic ({auc:.4f})')
     # plt.legend(loc="lower right")
     
-    ap_figure = plt.figure(figsize=(12,12))
-    for i in range(len(y_list)):
-        y, pred = y_list[i], pred_list[i]
-        prc, rec, _ = precision_recall_curve(y, pred)
-        plt.plot(rec, prc, color='c', lw=0.3)
+    ap_figure = plt.figure(figsize=figsize)
+    
+    prc, rec, _ = precision_recall_curve(y, pred)
+    plt.plot(rec, prc, color='c', lw=0.3)
+    # for i in range(len(y_list)):
+    #     y, pred = y_list[i], pred_list[i]
+    #     prc, rec, _ = precision_recall_curve(y, pred)
+    #     plt.plot(rec, prc, color='c', lw=0.3)
         
     plt.plot([0, 1], [0, 1], color="navy", lw=0.3, linestyle="--")
     plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.01])
+    plt.ylim([0.0, 1.0])
     plt.xlabel("Recall")
     plt.ylabel("Precision")
-    plt.title(f'Precision-Recall Curve ({pred_accuracy.mean(axis = 0)[1]:.4f})')
+    plt.title(f'Precision-Recall Curve ({ap:.4f})')
     
     
-    return pred_accuracy, [auc_figure, ap_figure] #, ('auc', 'ap')
+    return [auc, ap], [auc_figure, ap_figure] #, ('auc', 'ap')
 
 y_pred_res = []
 counter = 1
@@ -199,7 +209,7 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=30,
                                   min_lr=0.00001)
 
-    writer = SummaryWriter(log_dir='runs_g3median_n' f'{args.seqlen:0>4}' '/s' f'{args.samples:0>5}' '_r' 
+    writer = SummaryWriter(log_dir='runs_g3median_' f'{args.seqlen:0>4}' '/s' f'{args.samples:0>5}' '_r' 
                            f'{args.rate:0>3.1f}' '_' 'run' f'{counter:0>2}')
     
     train_dataset = dataset[train_index]
@@ -212,7 +222,8 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     test_loader = DataLoader(test_dataset, batch_size = test_batch)
     val_loader = DataLoader(val_dataset, batch_size = val_batch)
     
-    y_pred = []
+    y_pred = None
+    p_auc, p_ap = 0, 0
     for epoch in range(1, args.epoch + 1):
         # print(f'{time.ctime()} - Epoch: {epoch:04d}')
         loss = train(model, train_loader)
@@ -228,7 +239,8 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
         y_list, pred_list = predict(model, test_loader)
         
         pred_acc, figures = cal_accuracy(y_list, pred_list)
-        auc, ap = np.mean(pred_acc, axis = 0)
+        # auc, ap = np.mean(pred_acc, axis = 0)
+        auc, ap = pred_acc
 
         writer.add_scalar('auc/test', auc, epoch)
         writer.add_scalar('ap/test', ap, epoch)
@@ -236,11 +248,14 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
         writer.add_figure('roc/test', figures[0], epoch)
         writer.add_figure('pr/test', figures[1], epoch)
         
-        y_pred.append(torch.cat([torch.tensor(np.array([y, pred])) 
-                                 for y, pred in zip(y_list, pred_list)], axis = 1))
+        if auc >= p_auc and ap >= p_ap:
+            y_pred = torch.cat([torch.tensor(np.array([y, pred])) 
+                                     for y, pred in zip(y_list, pred_list)], 
+                                    axis = 1)
+            p_auc, p_ap = auc, ap
         
         
-    y_pred_res.append(torch.cat(y_pred, axis = 0))
+    y_pred_res.append(y_pred)
     
     writer.close()
     counter += 1
