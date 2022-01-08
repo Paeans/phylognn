@@ -187,17 +187,19 @@ def cal_accuracy(y_list, pred_list):
     
     return pred_accuracy, [auc_figure, ap_figure] #, ('auc', 'ap')
 
+y_pred_res = []
 counter = 1
 for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     
-    print(f'{time.ctime()} -- fold: {counter:0>2}')
+    print(f'{time.ctime()} -- seqlen:{args.seqlen:0>4} '
+          f'rate:{args.rate:.2f} samples:{args.samples:0>5} -- fold: {counter:0>2}')
     
     model = G3Median_VGAE(G3Median_GCNConv(in_channels, out_channels)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=30,
                                   min_lr=0.00001)
 
-    writer = SummaryWriter(log_dir='runs_g3median_' f'{args.seqlen:0>4}' '/rate' '_' 
+    writer = SummaryWriter(log_dir='runs_g3median_n' f'{args.seqlen:0>4}' '/s' f'{args.samples:0>5}' '_r' 
                            f'{args.rate:0>3.1f}' '_' 'run' f'{counter:0>2}')
     
     train_dataset = dataset[train_index]
@@ -210,7 +212,7 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     test_loader = DataLoader(test_dataset, batch_size = test_batch)
     val_loader = DataLoader(val_dataset, batch_size = val_batch)
     
-    
+    y_pred = []
     for epoch in range(1, args.epoch + 1):
         # print(f'{time.ctime()} - Epoch: {epoch:04d}')
         loss = train(model, train_loader)
@@ -233,5 +235,18 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
         
         writer.add_figure('roc/test', figures[0], epoch)
         writer.add_figure('pr/test', figures[1], epoch)
+        
+        y_pred.append(torch.cat([torch.tensor(np.array([y, pred])) 
+                                 for y, pred in zip(y_list, pred_list)], axis = 1))
+        
+        
+    y_pred_res.append(torch.cat(y_pred, axis = 0))
+    
     writer.close()
     counter += 1
+    
+torch.save(y_pred_res, 
+           f'y_pred/l' f'{args.seqlen:0>4}' 
+           '-r' f'{args.rate:0>3.1f}' 
+           '-s' f'{args.samples:0>5}' 
+           '-' f'{int(time.time()):0>10}.pt')
