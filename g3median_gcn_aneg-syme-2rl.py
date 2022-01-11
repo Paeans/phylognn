@@ -8,6 +8,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 # from torch_geometric.nn import VGAE
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import (degree, negative_sampling, 
+                                   batched_negative_sampling,
                                   add_self_loops, to_undirected)
 
 from torch.utils.tensorboard import SummaryWriter
@@ -47,7 +48,7 @@ dataset = G3MedianDataset('dataset_g3m', args.seqlen, int(args.seqlen * args.rat
 
 in_channels, out_channels = None, 16
 
-data_size = len(dataset)
+# data_size = len(dataset)
 # train_size, test_size, val_size = ((int)(data_size * train_p), 
 #                                    (int)(data_size * test_p), 
 #                                    (int)(data_size * val_p))
@@ -84,10 +85,9 @@ def train(model, train_loader):
     model.train()
     
     total_loss = 0
-    for data in train_loader:
-        
-        data = data.to(device)
+    for data in train_loader:    
         optimizer.zero_grad()
+        data = data.to(device)
         
         z = model.encode(data.x, data.edge_index)
         loss = model.recon_loss(z, data.pos_edge_label_index, data.neg_edge_label_index) * 2
@@ -98,29 +98,29 @@ def train(model, train_loader):
         total_loss += loss
     return total_loss/len(train_loader)
 
-@torch.no_grad()
-def test(model, test_loader):
-    model.eval()
-    auc, ap = 0, 0
+# @torch.no_grad()
+# def test(model, test_loader):
+#     model.eval()
+#     auc, ap = 0, 0
     
-    for data in test_loader:
+#     for data in test_loader:
         
-        data = data.to(device)
+#         data = data.to(device)
         
-        z = model.encode(data.x, data.edge_index)
-        # loss += model.recon_loss(z, data.pos_edge_label_index, data.neg_edge_label_index)
-        tauc, tap = model.test(z, data.pos_edge_label_index, data.neg_edge_label_index)
+#         z = model.encode(data.x, data.edge_index)
+#         # loss += model.recon_loss(z, data.pos_edge_label_index, data.neg_edge_label_index)
+#         tauc, tap = model.test(z, data.pos_edge_label_index) #, data.neg_edge_label_index)
         
-        auc += tauc
-        ap += tap
+#         auc += tauc
+#         ap += tap
         
-    return auc/len(test_loader), ap/len(test_loader)
+#     return auc/len(test_loader), ap/len(test_loader)
 
 @torch.no_grad()
 def predict(model, test_loader):
     model.eval()
     y_list, pred_list = [], []
-    
+        
     for data in test_loader:
         
         data = data.to(device)
@@ -139,15 +139,19 @@ def val(model, val_loader):
     model.eval()
     loss = 0
     
-    for data in val_loader:
-        
-        data = data.to(device)
-        
-        z = model.encode(data.x, data.edge_index)
+    for data in val_loader:        
+        data = data.to(device)        
+        z = model.encode(data.x, data.edge_index)        
         loss += model.recon_loss(z, data.pos_edge_label_index, data.neg_edge_label_index)
         # tauc, tap = model.test(z, data.pos_edge_label_index, data.neg_edge_label_index)
                 
     return loss/len(val_loader)
+
+def auc_ap(y_list, pred_list):
+    pred_accuracy = [[roc_auc_score(y, pred), average_precision_score(y, pred)]
+                     for y, pred in zip(y_list, pred_list)]
+    auc, ap = np.mean(pred_accuracy, axis = 0)
+    return auc, ap
 
 def cal_accuracy(y_list, pred_list):
     # pred_accuracy = np.zeros((len(y_list), 2))
@@ -206,7 +210,7 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     
     model = G3Median_VGAE(G3Median_GCNConv(in_channels, out_channels)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=30,
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=15,
                                   min_lr=0.00001)
 
     writer = SummaryWriter(log_dir='runs_g3median_' f'{args.seqlen:0>4}' '/s' f'{args.samples:0>5}' '_r' 
@@ -222,14 +226,14 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     test_loader = DataLoader(test_dataset, batch_size = test_batch)
     val_loader = DataLoader(val_dataset, batch_size = val_batch)
     
+    start_time = time.time()
+    
     y_pred = None
     p_auc, p_ap = 0, 0
     for epoch in range(1, args.epoch + 1):
-        # print(f'{time.ctime()} - Epoch: {epoch:04d}')
+        
         loss = train(model, train_loader)
-        # print(f'{time.ctime()} - \t train loss: {loss:.6f}')
         tloss = val(model, val_loader)
-        # print(f'{time.ctime()} - \t val   loss: {tloss:.6f}')
         scheduler.step(tloss)
 
         writer.add_scalar('loss/train', loss, epoch)
@@ -237,31 +241,35 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
 
 
         y_list, pred_list = predict(model, test_loader)
+        # pred_acc, figures = cal_accuracy(y_list, pred_list)        
+        # auc, ap = pred_acc
         
-        pred_acc, figures = cal_accuracy(y_list, pred_list)
-        # auc, ap = np.mean(pred_acc, axis = 0)
-        auc, ap = pred_acc
-
+        # y_list, pred_list = predict(model, test_dataset)
+        auc, ap = auc_ap(y_list, pred_list)
+        
         writer.add_scalar('auc/test', auc, epoch)
         writer.add_scalar('ap/test', ap, epoch)
         
-        writer.add_figure('roc/test', figures[0], epoch)
-        writer.add_figure('pr/test', figures[1], epoch)
+        # writer.add_figure('roc/test', figures[0], epoch)
+        # writer.add_figure('pr/test', figures[1], epoch)
         
         if auc >= p_auc and ap >= p_ap:
-            y_pred = torch.cat([torch.tensor(np.array([y, pred])) 
+            y_pred = np.concatenate([np.array([y, pred])
                                      for y, pred in zip(y_list, pred_list)], 
                                     axis = 1)
             p_auc, p_ap = auc, ap
         
-        
+    end_time = time.time()
+    print(f'{time.ctime()} -- seqlen:{args.seqlen:0>4} '
+          f'rate:{args.rate:.2f} samples:{args.samples:0>5} -- fold: {counter:0>2}'
+         f' -- {(end_time - start_time)/args.epoch:>10.3f}s * {args.epoch:0>4} epoches')
     y_pred_res.append(y_pred)
     
     writer.close()
     counter += 1
     
 torch.save(y_pred_res, 
-           f'y_pred/l' f'{args.seqlen:0>4}' 
+           f'y_pred/lnew' f'{args.seqlen:0>4}' 
            '-r' f'{args.rate:0>3.1f}' 
            '-s' f'{args.samples:0>5}' 
            '-' f'{int(time.time()):0>10}.pt')
