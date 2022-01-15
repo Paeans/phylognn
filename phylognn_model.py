@@ -168,6 +168,19 @@ class G3Median_VGAE(VGAE):
 #         neg_loss = -torch.log(1 - pred[y == 0] + EPS).mean()
 
 #         return pos_loss + neg_loss
+
+    def recon_loss_wt(self, z, pos_edge_index, neg_edge_index=None, pwt=1, nwt=1):
+        
+        pos_loss = -torch.log(
+            self.decoder(z, pos_edge_index, sigmoid=True) + EPS).mean()
+        
+        if neg_edge_index is None:
+            neg_edge_index = negative_sampling(pos_edge_index, z.size(0))
+        neg_loss = -torch.log(1 -
+                              self.decoder(z, neg_edge_index, sigmoid=True) +
+                              EPS).mean()
+
+        return pwt * pos_loss + nwt * neg_loss
         
     
 class G2Dist_GCNConv(torch.nn.Module):

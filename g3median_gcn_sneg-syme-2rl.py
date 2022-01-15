@@ -34,13 +34,15 @@ parser.add_argument("--rate", type=float, default = 0.1)
 parser.add_argument("--samples", type=int, default = 1000)
 parser.add_argument("--epoch", type=int, default=1000)
 parser.add_argument("--cvsplit", type=int, default=5)
+parser.add_argument("--freq", type=int, default=20)
+parser.add_argument("--shuffle", type=int, default=1)
 args = parser.parse_args()
 
 
 gpuid = args.gpuid # 0
 
 # train_p, test_p, val_p = 0.7, 0.2, 0.1
-train_batch, test_batch, val_batch = 64, 64, 8
+train_batch, test_batch, val_batch = 32, 32, 8
 
 device = torch.device('cuda:' + str(gpuid) if torch.cuda.is_available() else 'cpu')
 
@@ -211,7 +213,7 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     model = G3Median_VGAE(G3Median_GCNConv(in_channels, out_channels)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5,
-                                  min_lr=0.00001, verbose=True)
+                                  min_lr=0.00001,verbose=True)
 
     writer = SummaryWriter(log_dir='runs_g3median_' f'{args.seqlen:0>4}' '/s' f'{args.samples:0>5}' '_r' 
                            f'{args.rate:0>3.1f}' '_' 'run' f'{counter:0>2}')
@@ -219,12 +221,12 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     train_dataset = dataset[train_index]
     test_dataset = dataset[test_index]
     
-    # train_dataset = train_dataset[:int(len(train_dataset) * 0.9)]
-    # val_dataset = train_dataset[int(len(train_dataset) * 0.9):]
+    train_dataset = train_dataset[:int(len(train_dataset) * 0.9)]
+    val_dataset = train_dataset[int(len(train_dataset) * 0.9):]
     
     train_loader = DataLoader(train_dataset, batch_size = train_batch, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size = test_batch)
-    # val_loader = DataLoader(val_dataset, batch_size = val_batch)
+    val_loader = DataLoader(val_dataset, batch_size = val_batch)
     
     start_time = time.time()
     
@@ -233,13 +235,13 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     for epoch in range(1, args.epoch + 1):
         
         loss = train(model, train_loader)
-        tloss = val(model, test_loader)
+        tloss = val(model, val_loader)
         scheduler.step(tloss)
 
         writer.add_scalar('loss/train', loss, epoch)
         writer.add_scalar('loss/val', tloss, epoch)
         
-        if epoch % 20 != 0:
+        if epoch % args.freq != 0:
             continue
             
         y_list, pred_list = predict(model, test_loader)
@@ -273,7 +275,7 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     break
     
 torch.save(y_pred_res, 
-           f'y_pred/l' f'{args.seqlen:0>4}' 
+           f'y_pred/ldel' f'{args.seqlen:0>4}' 
            '-r' f'{args.rate:0>3.1f}' 
            '-s' f'{args.samples:0>5}' 
            '-' f'{int(time.time()):0>10}.pt')

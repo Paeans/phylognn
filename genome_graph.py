@@ -5,7 +5,10 @@ import networkx as nx
 
 from torch_geometric.data import Data
 from torch_geometric.utils.convert import to_networkx
-from torch_geometric.utils import negative_sampling, add_self_loops
+from torch_geometric.utils import (negative_sampling, 
+                                   add_self_loops, 
+                                   to_dense_adj, 
+                                   to_undirected)
 
 import matplotlib.pyplot as plt
 
@@ -83,10 +86,17 @@ def gen_graph(genome, label = None): # label number
     # node_x = np.zeros((node_num, 2), dtype = np.int32)
     # node_x[np.arange(node_num) % 2 == 0, 0] = 1
     # node_x[np.arange(node_num) % 2 == 1, 1] = 1
-    node_x = np.arange(node_num)
     
-    graph_data = Data(x = torch.tensor(node_x, dtype = torch.long), 
-                      edge_index = torch.tensor(graph_adj, dtype = torch.long), 
+    edge_index = torch.tensor(graph_adj, dtype = torch.long)    
+    # edge_index = to_undirected(edge_index)
+    
+    # node_x = to_dense_adj(edge_index).to(torch.long).squeeze()    
+    # node_x[node_x > 0] = 1
+    
+    node_x = torch.tensor(np.arange(node_num), dtype = torch.long)
+    
+    graph_data = Data(x = node_x, 
+                      edge_index = edge_index, # torch.tensor(graph_adj, dtype = torch.long), 
                       edge_attr = torch.tensor(edge_attr),
                       dtype = torch.long, num_nodes = node_num)
     graph_data.y = torch.tensor([label if label else 0], dtype = torch.long)
@@ -126,13 +136,12 @@ def gen_g2g_graph(genome, target):
                       edge_attr = torch.tensor(edge_attr), num_nodes = node_num)
                       # dtype = torch.float, num_nodes = node_num)
     target_graph = gen_graph([target], 0)
-    graph_data.pos_edge_label_index = target_graph.edge_index
-    # graph_data.neg_edge_label_index, _ = add_self_loops(negative_sampling(target_graph.edge_index, 
-                                                        # target_graph.num_nodes,
-                                                        # target_graph.num_nodes**2))
+    # graph_data.pos_edge_label_index = target_graph.edge_index
+    graph_data.pos_edge_label_index, _ = add_self_loops(to_undirected(target_graph.edge_index))
+    graph_data.neg_edge_label_index = negative_sampling(graph_data.pos_edge_label_index, 
+                                                        node_num,
+                                                        node_num**2)
     
-    # add self-loops
-        
     return graph_data    
     
 def gen_single_graph(genome):

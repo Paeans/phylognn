@@ -6,6 +6,7 @@ import torch
 
 from gene_mat import gen_dataset_wt, gen_dataset_wb, gen_g2g_data, gen_m3g_data
 from genome_graph import gen_graph, gen_g2g_graph, gen_g2b_graph
+from gene_mat import dcj_dist
 
 from torch_geometric.data import InMemoryDataset
 
@@ -21,9 +22,11 @@ def save_dataset(gene_len, step_range, graph_num = None, fname = None):
     gene = np.zeros((graph_num * step_range, 2, gene_len), dtype = np.int32) #[]
     label = np.zeros(graph_num * step_range, dtype = np.int32) #[]
     for step in range(0, step_range):
-        s, o, t = gen_dataset_wt(gene_len, graph_num, step + 2, op_type = 2)
+        s, o, t = gen_dataset_wt(gene_len, graph_num, step + 1, op_type = 2)
         gene[step * graph_num : (step + 1) * graph_num] = s[:, (0,-1)].astype(np.int32)
-        label[step * graph_num : (step + 1) * graph_num] = step + 1 #inv_num = step + 1
+        # label[step * graph_num : (step + 1) * graph_num] = step 
+        g_dist = [dcj_dist(g[0], g[1])[-1] for g in s[:, (0, -1)]]
+        label[step * graph_num : (step + 1) * graph_num] = g_dist
         
 #         g += [gen_graph(x, label = inv_num) for x in s]
     torch.save((gene, label), fname)
@@ -65,7 +68,7 @@ def save_g2g_dataset(gene_len, step, graph_num = None, fname = None):
         target[dist * graph_num : (dist + 1) * graph_num] = s[:, 1]
     torch.save((source, target), fname)
 
-def save_g3m_dataset(gene_len, step, graph_num = None, fname = None, mid_num = None):
+def save_g3m_dataset_old(gene_len, step, graph_num = None, fname = None, mid_num = None):
     if graph_num == None:
         graph_num = 100
         
@@ -85,6 +88,26 @@ def save_g3m_dataset(gene_len, step, graph_num = None, fname = None, mid_num = N
         m_seq, t_seq = gen_m3g_data(gene_len, graph_num, dist + 1, op_type = 2, mid_num = mid_num)
         source[dist * graph_num : (dist + 1) * graph_num] = m_seq
         target[dist * graph_num : (dist + 1) * graph_num] = t_seq.squeeze()
+        
+    torch.save((source, target), fname)
+    
+def save_g3m_dataset(gene_len, step, graph_num = None, fname = None, mid_num = None):
+    if graph_num == None:
+        graph_num = 1000
+        
+    if fname == None:
+        fname = 'g3m_' + str(gene_len) + '_' + str(step) + '.pt'
+        
+    if mid_num == None:
+        mid_num = 3
+    
+    source = np.zeros((graph_num, mid_num, gene_len), dtype = np.int32) 
+    target = np.zeros((graph_num, gene_len), dtype = np.int32)
+    
+            
+    m_seq, t_seq = gen_m3g_data(gene_len, graph_num, step, op_type = 2, mid_num = mid_num)
+    source[0 : graph_num] = m_seq
+    target[0 : graph_num] = t_seq.squeeze()
         
     torch.save((source, target), fname)
 
@@ -124,7 +147,7 @@ class GeneGraphDataset(InMemoryDataset):
         filename = self.raw_dir + '/' + self.raw_file_names[0]
         gene_list, label = torch.load(filename) #, map_location=torch.device('cuda'))        
         
-        data_list = [gen_graph(x, label = inv_num) for x, inv_num in zip(gene_list, label)]
+        data_list = [gen_graph_adj(x, label = inv_num) for x, inv_num in zip(gene_list, label)]
         # with Pool(22) as p:
             # data_list = p.starmap(gen_graph, [(x, inv_num) for x, inv_num in zip(gene_list, label)])
 

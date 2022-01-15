@@ -174,7 +174,7 @@ def gen_dataset(l,n, repeat = 1):
         new_seq = np.matmul(new_seq, new_o)
         # new_seq = th.matmul(new_seq, th.tensor(new_o, dtype = th.float, device = device))
 #         s = np.concatenate((s, new_seq.cpu().numpy()), axis = 1)
-        s[:, i:(i+1)] = new_seq.cpu().numpy()
+        s[:, i:(i+1)] = new_seq # .cpu().numpy()
 #         o = np.concatenate((o, np.expand_dims(new_o, 1)), axis = 1)
 #         t = np.concatenate((t, np.expand_dims(new_t, 1)), axis = 1)
         t[:, i] = new_t
@@ -194,7 +194,7 @@ def gen_dataset_wt(l,n, step = 1, op_type = None):
         new_o, new_t = gen_op_mat(s.shape[-1], s.shape[0], op_type)
         # new_seq = th.matmul(new_seq, th.tensor(new_o, dtype = th.float, device = device))
         new_seq = np.matmul(new_seq, new_o)
-        s[:, i:(i+1)] = new_seq.cpu().numpy()
+        s[:, i:(i+1)] = new_seq # .cpu().numpy()
         t[:, i] = new_t
     return s, None, t
 
@@ -228,10 +228,11 @@ def gen_dataset_wb(l,n, step = 1, op_type = None): # , device = None):
         with Pool(22) as p:
             b[:, i] = p.starmap(gen_bp, [(seq[0], bp) 
                                              for seq, bp in 
-                                             zip(new_seq.cpu().numpy(), bp_list)])
+                                         zip(new_seq, bp_list)])
+                                             # zip(new_seq.cpu().numpy(), bp_list)])
         # new_seq = th.matmul(new_seq, th.tensor(new_o, dtype = th.float, device = device))
         new_seq = np.matmul(new_seq, new_o)
-        s[:, i:(i+1)] = new_seq.cpu().numpy()
+        s[:, i:(i+1)] = new_seq # .cpu().numpy()
         t[:, i] = new_t
     return s, None, t, b
 
@@ -275,11 +276,12 @@ def mid_dcj(s, p):
 def gene_mid(s, cand_seqs, mid_num = 3):
     cand_len = len(cand_seqs)
     cnum = np.random.choice(cand_len, mid_num, replace = False)
+    
     while not mid_dcj(s, cand_seqs[cnum].squeeze()):
         cnum = np.random.choice(cand_len, mid_num, replace = False)
     return cand_seqs[cnum]
 
-def gen_m3g_data(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
+def gen_m3g_data_old(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
     seq = gen_seqs(gene_len, graph_num)
     
     new_seq = np.zeros((graph_num, k * step, 1, gene_len)) # graph_num, k * step, 1, gene_len
@@ -289,6 +291,25 @@ def gen_m3g_data(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
         op = gen_op_mat(gene_len, graph_num * k, 
                         op_type)[0].reshape(graph_num, k, 
                                             gene_len, gene_len) # graph_num, k, gene_len, gene_len
+        tmp_seq = np.matmul(tmp_seq, op) # graph_num, k, 1, gene_len
+        # tmp_seq = th.matmul(tmp_seq, th.tensor(op, dtype = th.float, device = device))
+        new_seq[:, i * k:(i+1) * k] = tmp_seq # .cpu().numpy() # tmp_seq
+       
+    # with Pool(10) as p:
+        # mid_seq = p.starmap(gene_mid, [(s[0], ns, mid_num) for s, ns in zip(seq, new_seq)])
+        # graph_num, mid_num, 1, gene_len
+    mid_seq = [gene_mid(s[0], ns, mid_num) for s, ns in zip(seq, new_seq)]
+    
+    return np.array(mid_seq).squeeze(axis = -2), seq
+
+def gen_m3g_data(gene_len, graph_num, step, op_type, mid_num = 3, k = 10):
+    seq = gen_seqs(gene_len, graph_num)
+    
+    new_seq = np.zeros((graph_num, k * step, 1, gene_len)) # graph_num, k * step, 1, gene_len
+    tmp_seq = np.expand_dims(seq, axis = 1) # graph_num, 1, 1, gene_len
+    # tmp_seq = th.tensor(np.expand_dims(seq, axis = 1), dtype = th.float, device = device)
+    for i in range(step):
+        op = np.expand_dims(gen_op_mat(gene_len, k, op_type)[0], axis = 0)
         tmp_seq = np.matmul(tmp_seq, op) # graph_num, k, 1, gene_len
         # tmp_seq = th.matmul(tmp_seq, th.tensor(op, dtype = th.float, device = device))
         new_seq[:, i * k:(i+1) * k] = tmp_seq # .cpu().numpy() # tmp_seq
