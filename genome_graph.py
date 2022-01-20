@@ -103,7 +103,7 @@ def gen_graph(genome, label = None): # label number
         
     return graph_data
         
-def gen_g2g_graph(genome, target):
+def gen_g2g_graph_old(genome, target, nf_base = 0):
     gene_adj = [encodeAdj(gene) for gene in genome]
     num_edges = np.sum([len(g) - 3 for g in gene_adj])
     num_genes = len(genome)
@@ -129,7 +129,7 @@ def gen_g2g_graph(genome, target):
     # node_x = np.zeros((node_num, 2), dtype = np.int32)
     # node_x[np.arange(node_num) % 2 == 0, 0] = 1
     # node_x[np.arange(node_num) % 2 == 1, 1] = 1
-    node_x = np.arange(node_num)
+    node_x = np.arange(node_num) # + nf_base
     
     graph_data = Data(x = torch.tensor(node_x, dtype = torch.long), 
                       edge_index = torch.tensor(graph_adj, dtype = torch.long), 
@@ -143,7 +143,77 @@ def gen_g2g_graph(genome, target):
                                                         node_num**2)
     
     return graph_data    
+        
+def gen_pos_neg_edge(edge_index, node_num):
+    adj_matrix = to_dense_adj(to_undirected(edge_index), 
+                              max_num_nodes = node_num).squeeze()
+    assert node_num % 2 == 0
+    n = node_num // 2
+    pos_edge_index = np.zeros((2, n - 1))
+    neg_edge_index = np.zeros((2, n * (node_num - 2) - (n - 1)))
     
+    p_index, n_index = 0, 0
+    for i in range(0, node_num, 2):
+        for j in range(i + 2, node_num):
+            if adj_matrix[i, j] == 1:
+                pos_edge_index[:, p_index] = [i, j]
+                p_index += 1
+            else:
+                neg_edge_index[:, n_index] = [i, j]
+                n_index += 1
+                
+            if adj_matrix[i + 1, j] == 1:
+                pos_edge_index[:, p_index] = [i + 1, j]
+                p_index += 1
+            else:
+                neg_edge_index[:, n_index] = [i + 1, j]
+                n_index += 1
+                
+    return (torch.tensor(pos_edge_index, dtype=torch.long), 
+            torch.tensor(neg_edge_index, dtype=torch.long))
+    
+def gen_g2g_graph(genome, target, nf_base = 0):
+    gene_adj = [encodeAdj(gene) for gene in genome]
+    num_edges = np.sum([len(g) - 3 for g in gene_adj])
+    num_genes = len(genome)
+    
+    graph_adj = np.zeros((2, num_edges), dtype = np.int32)
+    edge_attr = np.zeros((num_edges, num_genes), dtype = np.int32)
+    
+    L, g_index = 0, 0
+    for gene in gene_adj:
+        gene_s = gene[1:-2]
+        gene_e = gene[2:-1]
+        l = len(gene_s)
+        
+        graph_adj[0, L : L + l] = gene_s
+        graph_adj[1, L : L + l] = gene_e
+        
+        edge_attr[L : L + l, g_index] = 1
+        
+        L += l
+        g_index += 1
+        
+    node_num = np.max(gene_adj) + 1
+    # node_x = np.zeros((node_num, 2), dtype = np.int32)
+    # node_x[np.arange(node_num) % 2 == 0, 0] = 1
+    # node_x[np.arange(node_num) % 2 == 1, 1] = 1
+    node_x = np.arange(node_num) # + nf_base
+    
+    graph_data = Data(x = torch.tensor(node_x, dtype = torch.long), 
+                      edge_index = torch.tensor(graph_adj, dtype = torch.long), 
+                      edge_attr = torch.tensor(edge_attr), num_nodes = node_num)
+                      # dtype = torch.float, num_nodes = node_num)
+    target_graph = gen_graph([target], 0)
+    # graph_data.pos_edge_label_index = target_graph.edge_index
+    # graph_data.pos_edge_label_index, _ = add_self_loops(to_undirected(target_graph.edge_index))
+    # graph_data.neg_edge_label_index = negative_sampling(graph_data.pos_edge_label_index, 
+    #                                                     node_num,
+    #                                                     node_num**2)
+    graph_data.pos_edge_label_index, graph_data.neg_edge_label_index = gen_pos_neg_edge(target_graph.edge_index, node_num)
+    
+    return graph_data 
+
 def gen_single_graph(genome):
     graph_adj = np.empty((2,0), dtype = np.int32)
     max_node_index = []

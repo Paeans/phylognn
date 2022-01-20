@@ -111,20 +111,20 @@ class G3Median_GCNConv(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
         super(G3Median_GCNConv, self).__init__()
 
-        self.node_emb = Embedding(10000, 75)
+        self.node_emb = Embedding(10000, in_channels)
 
         aggregators = ['mean', 'min', 'max', 'std']
         scalers = ['identity', 'amplification', 'attenuation']
         
-        self.conv_mu = GCNConv(75, out_channels)
-        self.conv_logstd = GCNConv(75, out_channels)
+        self.conv_mu = GCNConv(in_channels, out_channels)
+        self.conv_logstd = GCNConv(in_channels, out_channels)
         
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
         for _ in range(4):
-            conv = GCNConv(in_channels=75, out_channels=75)
+            conv = GCNConv(in_channels=in_channels, out_channels=in_channels)
             self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(75))
+            self.batch_norms.append(BatchNorm(in_channels))
 
     def forward(self, x, edge_index): #, edge_attr, batch):
         

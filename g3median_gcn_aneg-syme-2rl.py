@@ -85,17 +85,23 @@ def train(model, train_loader):
     model.train()
     
     total_loss = 0
-    for data in train_loader:    
+    loss = 0
+    for i, data in enumerate(train_loader):    
         optimizer.zero_grad()
         data = data.to(device)
         
         z = model.encode(data.x, data.edge_index)
-        loss = model.recon_loss_wt(z, data.pos_edge_label_index, data.neg_edge_label_index, 10, 1) * 10
+        loss += model.recon_loss_wt(z, data.pos_edge_label_index, data.neg_edge_label_index, 10, 1) * 10
+        
+        if i%2 == 0:
+            continue
+        
         loss = loss + (1 / data.num_nodes) * model.kl_loss() * 0.1
         loss.backward()
         optimizer.step()
         
         total_loss += loss
+        loss = 0
     return total_loss/len(train_loader)
 
 # @torch.no_grad()
@@ -213,7 +219,7 @@ for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5,
                                   min_lr=0.00001, verbose=True)
 
-    writer = SummaryWriter(log_dir='runs_g3median_' f'{args.seqlen:0>4}' '/s' f'{args.samples:0>5}' '_r' 
+    writer = SummaryWriter(log_dir='runs_g3median_' f'{args.seqlen:0>4}' '/s1n' f'{args.samples:0>5}' '_r' 
                            f'{args.rate:0>3.1f}' '_' 'run' f'{counter:0>2}')
     
     train_dataset = dataset[train_index]

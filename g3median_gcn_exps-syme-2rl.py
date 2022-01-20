@@ -13,6 +13,7 @@ from torch_geometric.utils import (degree, negative_sampling,
 
 from torch.utils.tensorboard import SummaryWriter
 
+from genome_graph import gen_g2g_graph
 from gene_graph_dataset import G3MedianDataset
 from phylognn_model import G3Median_GCNConv, G3Median_VGAE
 
@@ -25,6 +26,9 @@ from sklearn.model_selection import KFold
 
 import matplotlib.pyplot as plt
 
+from dcj_comp import dcj_dist
+from genome_file import mat2adj
+
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--gpuid", type=int, default = 0)
@@ -32,10 +36,12 @@ parser.add_argument("--gpuid", type=int, default = 0)
 parser.add_argument("--seqlen", type=int)
 parser.add_argument("--rate", type=float, default = 0.1)
 parser.add_argument("--samples", type=int, default = 1000)
-parser.add_argument("--epoch", type=int, default=1000)
-parser.add_argument("--cvsplit", type=int, default=5)
-parser.add_argument("--freq", type=int, default=20)
-parser.add_argument("--shuffle", type=int, default=1)
+parser.add_argument("--epoch", type=int, default = 1000)
+parser.add_argument("--cvsplit", type=int, default = 5)
+parser.add_argument("--freq", type=int, default = 20)
+parser.add_argument("--shuffle", type=int, default = 1)
+parser.add_argument("--vals", type=int, default = 100)
+parser.add_argument("--valr", type=float, default = 0.1)
 args = parser.parse_args()
 
 
@@ -47,40 +53,14 @@ train_batch, test_batch, val_batch = 256, 64, 8
 device = torch.device('cuda:' + str(gpuid) if torch.cuda.is_available() else 'cpu')
 
 dataset = G3MedianDataset('dataset_g3m', args.seqlen, int(args.seqlen * args.rate), args.samples)
+# val_dataset = G3MedianDataset('val_seq_g3m', args.seqlen, int(args.seqlen * args.valr), args.vals)
+val_seq, tar_seq = torch.load(f'val_seq_g3m_3_{args.seqlen}_{int(args.seqlen * args.valr)}_{args.vals}/'
+                              f'raw/g3raw_{args.seqlen}_{int(args.seqlen * args.valr)}.pt')
+val_dataset = [gen_g2g_graph(s, t) for s,t in zip(val_seq, tar_seq)]
 
-in_channels, out_channels = 256, 128
+in_channels, out_channels = None, 128
 
-# data_size = len(dataset)
-# train_size, test_size, val_size = ((int)(data_size * train_p), 
-#                                    (int)(data_size * test_p), 
-#                                    (int)(data_size * val_p))
-
-# print(f'dataset size: {data_size:0>5}')
 dataset = dataset.shuffle()
-
-# train_dataset = dataset[:train_size]
-# test_dataset = dataset[train_size:(train_size + test_size)]
-# val_dataset = dataset[(train_size + test_size):(train_size + test_size + val_size)]
-
-# test_dataset = list(test_dataset)
-# for t in test_dataset:
-#     t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
-#     t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
-#                                         t.num_nodes,
-#                                         t.num_nodes**2)
-# train_dataset = list(train_dataset)
-# for t in train_dataset:
-#     t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
-#     t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
-#                                         t.num_nodes,
-#                                         t.num_nodes**2)
-# val_dataset = list(val_dataset)
-# for t in val_dataset:
-#     t.pos_edge_label_index = add_self_loops(to_undirected(t.pos_edge_label_index))[0]
-#     t.neg_edge_label_index = negative_sampling(t.pos_edge_label_index, 
-#                                         t.num_nodes,
-#                                         t.num_nodes**2)
-    
 
 # from torch_geometric.data import Batch
 def train(model, train_loader):
@@ -92,7 +72,7 @@ def train(model, train_loader):
         data = data.to(device)
         
         z = model.encode(data.x, data.edge_index)
-        loss = model.recon_loss_wt(z, data.pos_edge_label_index, data.neg_edge_label_index, 1.5, 1) * 5
+        loss = model.recon_loss_wt(z, data.pos_edge_label_index, data.neg_edge_label_index, 2, 1) * 5
         loss = loss + (1 / data.num_nodes) * model.kl_loss() * 0.5
         loss.backward()
         optimizer.step()
@@ -119,6 +99,29 @@ def train(model, train_loader):
 #     return auc/len(test_loader), ap/len(test_loader)
 
 @torch.no_grad()
+def median_score(model, val_dataset, val_sequence):
+    model.eval()
+    count, num = 0, 0
+    for d, seqs in zip(val_dataset, val_sequence):
+        d = d.to(device)
+        z = model.encode(d.x, d.edge_index)
+        res = model.decoder.forward_all(z).detach().cpu().numpy()
+        pred_seqs = mat2adj(res)
+        
+        pred_dist = min([sum([dcj_dist(pred, s)[-1] for s in seqs]) for pred in pred_seqs])
+        low_dist = np.ceil(sum([dcj_dist(seqs[0], seqs[1])[-1], 
+                                dcj_dist(seqs[0], seqs[2])[-1], 
+                                dcj_dist(seqs[1], seqs[2])[-1]])/2)
+
+        # print(f'{pred_dist:>3} -- {low_dist:<3}')
+        diff = pred_dist - low_dist
+        if diff == 0:
+            num += 1
+        count += diff
+
+    return count / len(val_dataset), num / len(val_dataset)
+
+@torch.no_grad()
 def predict(model, test_loader):
     model.eval()
     y_list, pred_list = [], []
@@ -129,9 +132,7 @@ def predict(model, test_loader):
         
         z = model.encode(data.x, data.edge_index)
         # loss += model.recon_loss(z, data.pos_edge_label_index, data.neg_edge_label_index)
-        pl, nl = data.pos_edge_label_index.size(-1), data.neg_edge_label_index.size(-1)
-        neg_index = torch.randperm(nl)[:pl]
-        y, pred = model.pred(z, data.pos_edge_label_index, data.neg_edge_label_index[:, neg_index])
+        y, pred = model.pred(z, data.pos_edge_label_index, data.neg_edge_label_index)
         
         y_list.append(y)
         pred_list.append(pred)
@@ -146,7 +147,7 @@ def val(model, val_loader):
     for data in val_loader:        
         data = data.to(device)        
         z = model.encode(data.x, data.edge_index)        
-        loss += model.recon_loss_wt(z, data.pos_edge_label_index, data.neg_edge_label_index, 1.5, 1)
+        loss += model.recon_loss_wt(z, data.pos_edge_label_index, data.neg_edge_label_index, 2, 1)
         # tauc, tap = model.test(z, data.pos_edge_label_index, data.neg_edge_label_index)
                 
     return loss/len(val_loader)
@@ -205,79 +206,51 @@ def cal_accuracy(y_list, pred_list):
     
     return [auc, ap], [auc_figure, ap_figure] #, ('auc', 'ap')
 
-y_pred_res = []
-counter = 1
-for train_index, test_index in KFold(n_splits = args.cvsplit).split(dataset):
-    
-    print(f'{time.ctime()} -- seqlen:{args.seqlen:0>4} '
-          f'rate:{args.rate:.2f} samples:{args.samples:0>5} -- fold: {counter:0>2}')
-    
-    model = G3Median_VGAE(G3Median_GCNConv(in_channels, out_channels)).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10,
-                                  min_lr=0.00001,verbose=True)
+print(f'{time.ctime()} -- seqlen:{args.seqlen:0>4} '
+      f'rate:{args.rate:.2f} samples:{args.samples:0>5} -- fold: {args.vals:0>4}')
 
-    writer = SummaryWriter(log_dir='runs_g3median_' f'{args.seqlen:0>4}' '/s' f'{args.samples:0>5}' '_r' 
-                           f'{args.rate:0>3.1f}' '_' 'run' f'{counter:0>2}')
-    
-    train_dataset = dataset[train_index]
-    test_dataset = dataset[test_index]
-    
-    train_dataset = train_dataset[:int(len(train_dataset) * 0.9)]
-    val_dataset = train_dataset[int(len(train_dataset) * 0.9):]
-    
-    train_loader = DataLoader(train_dataset, batch_size = train_batch, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size = test_batch)
-    val_loader = DataLoader(val_dataset, batch_size = val_batch)
-    
-    start_time = time.time()
-    
-    y_pred = None
-    p_auc, p_ap = 0, 0
-    for epoch in range(1, args.epoch + 1):
-        
-        loss = train(model, train_loader)
-        tloss = val(model, val_loader)
-        scheduler.step(tloss)
+model = G3Median_VGAE(G3Median_GCNConv(in_channels, out_channels)).to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10,
+                              min_lr=0.00001,verbose=True)
 
-        writer.add_scalar('loss/train', loss, epoch)
-        writer.add_scalar('loss/val', tloss, epoch)
-        
-        # if epoch % args.freq != 0:
-        #     continue
-            
-        y_list, pred_list = predict(model, test_loader)
-        # pred_acc, figures = cal_accuracy(y_list, pred_list)        
-        # auc, ap = pred_acc
-        
-        # y_list, pred_list = predict(model, test_dataset)
-        auc, ap = auc_ap(y_list, pred_list)
-        
-        writer.add_scalar('auc/test', auc, epoch)
-        writer.add_scalar('ap/test', ap, epoch)
-        
-        # writer.add_figure('roc/test', figures[0], epoch)
-        # writer.add_figure('pr/test', figures[1], epoch)
-        
-        if auc >= p_auc and ap >= p_ap:
-            y_pred = np.concatenate([np.array([y, pred])
-                                     for y, pred in zip(y_list, pred_list)], 
-                                    axis = 1)
-            p_auc, p_ap = auc, ap
-        
-    end_time = time.time()
-    print(f'{time.ctime()} -- seqlen:{args.seqlen:0>4} '
-          f'rate:{args.rate:.2f} samples:{args.samples:0>5} -- fold: {counter:0>2}'
-         f' -- {(end_time - start_time)/args.epoch:>10.3f}s * {args.epoch:0>4} epoches')
-    y_pred_res.append(y_pred)
+writer = SummaryWriter(log_dir='exps_g3median_' f'{args.seqlen:0>4}' '/e' f'{args.samples:0>5}' '_r' 
+                       f'{args.rate:0>3.1f}' '_' 'run_' f'{args.vals:0>4}')
+
+train_loader = DataLoader(dataset, batch_size = train_batch, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size = val_batch)
+
+start_time = time.time()
+for epoch in range(1, args.epoch + 1):
+
+    loss = train(model, train_loader)
+    tloss = val(model, val_loader)
+    scheduler.step(tloss)
+
+    writer.add_scalar('loss/train', loss, epoch)
+    writer.add_scalar('loss/val', tloss, epoch)
+
+    # if epoch % args.freq != 0:
+    #     continue
+
+    score, acc = median_score(model, val_dataset, val_seq)
+
+    y_list, pred_list = predict(model, val_loader)
+    auc, ap = auc_ap(y_list, pred_list)
+
+    writer.add_scalar('auc/test', auc, epoch)
+    writer.add_scalar('ap/test', ap, epoch)
+    writer.add_scalar('score/test', score, epoch)
+    writer.add_scalar('acc/test', acc, epoch)
+
+end_time = time.time()
+print(f'{time.ctime()} -- seqlen:{args.seqlen:0>4} '
+      f'rate:{args.rate:.2f} samples:{args.samples:0>5} -- fold: {args.vals:0>2}'
+     f' -- {(end_time - start_time)/args.epoch:>10.3f}s * {args.epoch:0>4} epoches')
+writer.close()
     
-    writer.close()
-    counter += 1
-    
-    break
-    
-torch.save(y_pred_res, 
-           f'y_pred/ldel' f'{args.seqlen:0>4}' 
-           '-r' f'{args.rate:0>3.1f}' 
-           '-s' f'{args.samples:0>5}' 
-           '-' f'{int(time.time()):0>10}.pt')
+# torch.save(y_pred_res, 
+#            f'y_pred/ldel' f'{args.seqlen:0>4}' 
+#            '-r' f'{args.rate:0>3.1f}' 
+#            '-s' f'{args.samples:0>5}' 
+#            '-' f'{int(time.time()):0>10}.pt')

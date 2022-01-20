@@ -215,3 +215,51 @@ def encodeAdj(genome):
         # cicle
         return np.delete(adjacency, -2)
     return adjacency
+
+def test_cycle(adj_dict, x, y):
+    while True:
+        x = x + (1 if x % 2 == 0 else -1)
+        if x == y:
+            return True
+        if x not in adj_dict.keys():
+            return False
+        x = adj_dict[x]
+
+def dict2adj(adj_dict, start):
+    res = []
+    while True:
+        end = start + (1 if start % 2 == 0 else -1)
+        res += [start, end]
+        if end not in adj_dict.keys():
+            break
+        start = adj_dict[end]
+        
+    return [(res[i]//2 + 1) * (-1 if res[i] > res[i+1] else 1) for i in range(0, len(res), 2)]
+        
+
+def mat2adj(res_mat):
+    gen_len = res_mat.shape[0]
+    tmp = np.copy(res_mat)
+    for i in range(0, gen_len, 2):
+        tmp[i, i:i+2] = 0
+        tmp[i + 1, i:i+2] = 0
+    adj_dict = {}
+    while True:
+        r,c = np.unravel_index(np.argmax(tmp, axis = None), tmp.shape)
+                
+        # test cycles
+        if test_cycle(adj_dict, r, c):
+            tmp[r, c] = 0
+            tmp[c, r] = 0
+            continue
+            
+        tmp[(r,c), :] = 0
+        tmp[:, (r,c)] = 0
+        adj_dict[r] = c
+        adj_dict[c] = r
+        if len(adj_dict)//2 == (gen_len//2 - 1):
+            break
+            
+    start = list(set(range(gen_len)) - set(adj_dict.keys()))
+    
+    return [dict2adj(adj_dict, a) for a in start]

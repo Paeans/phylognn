@@ -288,3 +288,49 @@ class G3MedianDataset(G2GraphDataset):
 
     def process(self):
         super().process()
+        
+class ExpsDataset(G2GraphDataset):
+    def __init__(self, root, gene_len, step_range, graph_num = 100, mid_num = 3):
+        self.mid_num = mid_num if mid_num >= 3 else 3
+        super().__init__(root + '_' + str(self.mid_num), gene_len, step_range, graph_num)
+        # self.data, self.slices = torch.load(self.processed_paths[0])
+        
+    @property
+    def raw_file_names(self):
+        return ['g3raw_' + str(self.gene_len) +
+                '_' + str(self.step_range) + '.pt']
+
+    @property
+    def processed_file_names(self):
+        return ['g3dat_' + str(self.gene_len) +
+                '_' + str(self.step_range) + '.pt']
+
+    def download(self):
+        # Download to `self.raw_dir`.
+        print('Generating...', file=sys.stderr)
+        save_g3m_dataset(self.gene_len, self.step_range, 
+                     graph_num = self.graph_num, 
+                     fname = self.raw_dir + '/' + self.raw_file_names[0],
+                     mid_num = self.mid_num)
+        pass
+
+    def process(self):
+        filename = self.raw_dir + '/' + self.raw_file_names[0]
+        source, target = torch.load(filename) #, map_location=torch.device('cuda'))        
+                
+        st_list = [(s, t) for s,t in zip(source, target)]
+        sample_size = len(st_list) // 200
+        
+        # data_list = [gen_g2g_graph(s, t) for s,t in zip(source, target)]
+        data_list = [gen_g2g_graph(s, t, i//sample_size) for i, (s,t) in enumerate(st_list)]
+        # with Pool(22) as p:
+            # data_list = p.starmap(gen_g2g_graph, [(s, t) for s, t in zip(source, target)])
+
+        if self.pre_filter is not None:
+            data_list = [data for data in data_list if self.pre_filter(data)]
+
+        if self.pre_transform is not None:
+            data_list = [self.pre_transform(data) for data in data_list]
+
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])
