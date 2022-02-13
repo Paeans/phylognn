@@ -1,6 +1,7 @@
 import numpy as np
 import random
 
+
 def write_genome(gene_groups, fname = 'genome.txt'):
     with open(fname, 'w') as gfile:
         for i in range(len(gene_groups)):
@@ -237,6 +238,33 @@ def dict2adj(adj_dict, start):
     return [(res[i]//2 + 1) * (-1 if res[i] > res[i+1] else 1) for i in range(0, len(res), 2)]
         
 
+# def mat2adj(res_mat):
+#     gen_len = res_mat.shape[0]
+#     tmp = np.copy(res_mat)
+#     for i in range(0, gen_len, 2):
+#         tmp[i, i:i+2] = 0
+#         tmp[i + 1, i:i+2] = 0
+#     adj_dict = {}
+#     while True:
+#         r,c = np.unravel_index(np.argmax(tmp, axis = None), tmp.shape)
+                
+#         # test cycles
+#         if test_cycle(adj_dict, r, c):
+#             tmp[r, c] = 0
+#             tmp[c, r] = 0
+#             continue
+            
+#         tmp[(r,c), :] = 0
+#         tmp[:, (r,c)] = 0
+#         adj_dict[r] = c
+#         adj_dict[c] = r
+#         if len(adj_dict)//2 == (gen_len//2 - 1):
+#             break
+            
+#     start = list(set(range(gen_len)) - set(adj_dict.keys()))
+    
+#     return [dict2adj(adj_dict, a) for a in start]
+
 def mat2adj(res_mat):
     gen_len = res_mat.shape[0]
     tmp = np.copy(res_mat)
@@ -244,22 +272,72 @@ def mat2adj(res_mat):
         tmp[i, i:i+2] = 0
         tmp[i + 1, i:i+2] = 0
     adj_dict = {}
+    p_list = []
     while True:
         r,c = np.unravel_index(np.argmax(tmp, axis = None), tmp.shape)
+        if r == c:
+            print(adj_dict)
+            break
                 
         # test cycles
         if test_cycle(adj_dict, r, c):
             tmp[r, c] = 0
             tmp[c, r] = 0
             continue
-            
+        p_list.append(tmp[r,c])    
         tmp[(r,c), :] = 0
         tmp[:, (r,c)] = 0
         adj_dict[r] = c
         adj_dict[c] = r
         if len(adj_dict)//2 == (gen_len//2 - 1):
             break
-            
+    
     start = list(set(range(gen_len)) - set(adj_dict.keys()))
     
-    return [dict2adj(adj_dict, a) for a in start]
+    return [dict2adj(adj_dict, a) for a in start], -np.log(p_list).sum()
+
+def pre_set_mat(res_mat):
+    tmp_mat = np.copy(res_mat)
+    for i in range(0, tmp_mat.shape[0], 2):
+        tmp_mat[i, i:i+2] = 0
+        tmp_mat[i + 1, i:i+2] = 0
+        
+    return tmp_mat
+
+def dist_eval(res, steps = 10, rate = 0.9):
+    pred_list, prob_list = [], []
+
+    res_mat = pre_set_mat(res)
+    pred, prob_ = mat2adj(res_mat)
+    pred_list.append(pred)
+    prob_list.append(prob_)
+
+    for _ in range(1, steps):
+        r,c = np.unravel_index(np.argmax(res_mat, axis = None), res_mat.shape)
+        if r == c:
+            break
+        if res_mat[r,c] == 1.0:
+            redv = 0.95
+        else:
+            redv = res_mat[r,c] * rate # res_mat[r,c]
+        res_mat[r,c] = redv
+        res_mat[c,r] = redv
+        pred, prob_ = mat2adj(res_mat)
+        
+        pred_list.append(pred)
+        prob_list.append(prob_)
+        
+    return pred_list, prob_list
+
+def pred_pair(res, val_seqs, steps = 10, rate = 0.9):
+    
+    from dcj_comp import dcj_dist
+    
+    pred_list, prob_list = dist_eval(res, steps, rate)
+    result = []
+    for pred, prob_ in zip(pred_list, prob_list):
+        tmp_dist = [sum([dcj_dist(p, s)[-1] for s in val_seqs]) for p in pred]
+        t = np.argmin(tmp_dist)
+        # p_seq = pred[np.argmin(tmp_dist)]
+        result.append((pred[t], prob_, tmp_dist[t]))
+    return result
